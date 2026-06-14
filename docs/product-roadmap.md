@@ -78,6 +78,43 @@
 - 失败有可理解的错误、重试和人工恢复路径。
 - 发布结果链接与时间可回写。
 
+## Phase 3S：公开 SaaS 产品架构基础
+
+**目标**
+
+在不重写现有工作台的前提下，建立公开 SaaS 所需的产品壳、权限模型和服务端边界。
+
+**核心功能**
+
+- Hash Router 与登录、本地开发模式、仪表盘、渠道、AI、Billing、团队和设置页面。
+- User、Workspace、Session、Subscription、Entitlement 和 Usage 模型。
+- 后端 API、数据库、对象存储、AI Provider、Billing 和 Worker 架构。
+- 平台凭据后端加密保存，发布任务由 Worker 执行。
+
+**技术风险**
+
+- 本地状态与未来服务端状态迁移的一致性。
+- 多租户隔离、用量计量和 Billing Webhook 的事务边界。
+- Worker 幂等、平台限流、凭据轮换和失败恢复。
+
+**验收标准**
+
+- SaaS 页面和权限函数可在纯前端 mock 模式验证。
+- 正式架构不依赖浏览器保存长期 Token 或第三方 CORS。
+- 原有 Phase 2.5 工作台和测试不回退。
+
+## Phase 3B：认证、数据与 Publisher Worker
+
+**目标**
+
+实现第一套可部署的 SaaS 后端，打通认证、Workspace、数据库、队列与 Halo Worker。
+
+**验收标准**
+
+- Halo PAT 加密保存且不返回浏览器。
+- PublishBatch 由 API 创建，PublishTask 由 Worker 执行。
+- Workspace 数据隔离、套餐权限和审计测试通过。
+
 ## Phase 4：第三方平台半自动适配与复制发布
 
 **目标**

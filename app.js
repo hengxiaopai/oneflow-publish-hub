@@ -1422,6 +1422,7 @@ if (typeof document !== "undefined") {
   let saveTimer = null;
   let pendingImportState = null;
   let storageRecoveryRequired = !restoredSnapshot.ok;
+  const stateSubscribers = new Set();
 
   const queueGroups = document.querySelector("#queue-groups");
   const publishSummary = document.querySelector("#publish-summary");
@@ -1529,6 +1530,9 @@ if (typeof document !== "undefined") {
       return false;
     }
     setSaveStatus("saved", result.savedAt);
+    stateSubscribers.forEach((listener) =>
+      listener(cloneProductState(productState))
+    );
     return true;
   }
 
@@ -2466,6 +2470,39 @@ if (typeof document !== "undefined") {
     window.clearTimeout(saveTimer);
     saveNow();
   });
+
+  window.OneFlowApp = {
+    getState() {
+      return cloneProductState(productState);
+    },
+    openLegacyView(view) {
+      switchView(view, false);
+    },
+    subscribe(listener) {
+      if (typeof listener !== "function") return () => {};
+      stateSubscribers.add(listener);
+      return () => stateSubscribers.delete(listener);
+    },
+    createNewArticle() {
+      productState = updateArticleContent(productState, {
+        ...cloneProductState(INITIAL_ARTICLE),
+        id: `article-${Date.now()}`,
+        title: "未命名草稿",
+        slug: `draft-${Date.now()}`,
+        summary: "",
+        bodyHtml: "<p>开始写作...</p>",
+        tags: [],
+        status: "draft",
+      });
+      hydrateEditor();
+      renderQueue();
+      renderContentLibrary();
+      saveNow();
+    },
+    openImport() {
+      importWorkspaceFile.click();
+    },
+  };
 
   publishTime.value =
     productState.workspaceSettings.publishTime || "now";

@@ -366,3 +366,312 @@ schema version 3 的本地快照，`mergePersistedState()` 负责用当前默认
 4. PublishTask 和 PublishBatch 已形成可恢复的本地发布记录。
 5. 封面目前只保存资源路径和说明，不保存用户上传的二进制文件。
 6. 接后端时应按模型拆分 API，并使用服务端版本号或 ETag 处理并发更新。
+
+## Phase 3S SaaS Identity And Billing Models
+
+以下模型属于目标 SaaS 后端。当前前端只使用非敏感 mock 投影，不把它们伪装成
+真实认证或支付记录。
+
+### User
+
+平台用户身份。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `id` | string | 用户 ID |
+| `email` | string | 已规范化邮箱 |
+| `displayName` | string | 显示名称 |
+| `avatarUrl` | string/null | 头像地址 |
+| `status` | string | `active`、`invited`、`suspended` |
+| `createdAt` | ISO string | 创建时间 |
+| `updatedAt` | ISO string | 更新时间 |
+
+```json
+{
+  "id": "usr_01",
+  "email": "creator@example.test",
+  "displayName": "林墨",
+  "status": "active"
+}
+```
+
+### Workspace
+
+内容、渠道、成员、订阅和用量的租户边界。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `id` | string | Workspace ID |
+| `name` | string | 工作区名称 |
+| `slug` | string | URL 标识 |
+| `ownerUserId` | string | 所有者 |
+| `billingCustomerId` | string/null | BillingCustomer |
+| `settings` | object | 非敏感工作区设置 |
+| `createdAt` | ISO string | 创建时间 |
+
+```json
+{
+  "id": "ws_01",
+  "name": "技术内容引擎",
+  "slug": "tech-content",
+  "ownerUserId": "usr_01"
+}
+```
+
+### WorkspaceMember
+
+User 与 Workspace 的成员关系。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `id` | string | 成员关系 ID |
+| `workspaceId` | string | Workspace |
+| `userId` | string | User |
+| `roleId` | string | Role |
+| `status` | string | `active`、`invited`、`removed` |
+| `invitedBy` | string/null | 邀请人 |
+| `joinedAt` | ISO string/null | 加入时间 |
+
+```json
+{
+  "id": "wsm_01",
+  "workspaceId": "ws_01",
+  "userId": "usr_01",
+  "roleId": "role_owner",
+  "status": "active"
+}
+```
+
+### Role
+
+工作区权限集合。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `id` | string | Role ID |
+| `key` | string | `owner`、`admin`、`editor`、`viewer` |
+| `name` | string | 展示名称 |
+| `permissions` | string[] | 稳定权限代码 |
+| `system` | boolean | 是否系统内置 |
+
+```json
+{
+  "id": "role_editor",
+  "key": "editor",
+  "name": "编辑",
+  "permissions": ["article.write", "publish.create", "ai.run"],
+  "system": true
+}
+```
+
+### Session
+
+服务端登录 Session。目标实现使用 HttpOnly Cookie，Session Secret 不返回前端。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `id` | string | Session ID |
+| `userId` | string | User |
+| `activeWorkspaceId` | string/null | 当前 Workspace |
+| `expiresAt` | ISO string | 过期时间 |
+| `lastSeenAt` | ISO string | 最近活动 |
+| `revokedAt` | ISO string/null | 撤销时间 |
+| `metadata` | object | 脱敏客户端信息 |
+
+```json
+{
+  "id": "ses_01",
+  "userId": "usr_01",
+  "activeWorkspaceId": "ws_01",
+  "expiresAt": "2026-07-14T00:00:00Z"
+}
+```
+
+### AuthProvider
+
+用户的密码、OAuth 或企业身份提供方关系。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `id` | string | Provider 关系 ID |
+| `userId` | string | User |
+| `provider` | string | `password`、`github`、`google` 等 |
+| `providerSubject` | string | Provider 用户标识 |
+| `credentialMetadata` | object | 非敏感状态 |
+| `createdAt` | ISO string | 绑定时间 |
+
+```json
+{
+  "id": "auth_01",
+  "userId": "usr_01",
+  "provider": "github",
+  "providerSubject": "123456",
+  "credentialMetadata": { "connected": true }
+}
+```
+
+### Plan
+
+可销售套餐定义。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `id` | string | `free`、`pro`、`studio` |
+| `name` | string | 展示名称 |
+| `status` | string | `active`、`archived` |
+| `billingInterval` | string/null | `month`、`year` 或免费 |
+| `priceMinor` | number | 最小货币单位价格 |
+| `currency` | string | ISO 货币代码 |
+| `entitlementIds` | string[] | 套餐权限 |
+
+```json
+{
+  "id": "pro",
+  "name": "Pro",
+  "status": "active",
+  "billingInterval": "month",
+  "priceMinor": 0,
+  "currency": "CNY"
+}
+```
+
+`priceMinor` 在产品定价确认前保持配置值，不由前端写死。
+
+### Subscription
+
+Workspace 的套餐订阅状态。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `id` | string | Subscription ID |
+| `workspaceId` | string | Workspace |
+| `planId` | string | Plan |
+| `status` | string | `trialing`、`active`、`past_due`、`cancelled` |
+| `currentPeriodStart` | ISO string | 计费周期开始 |
+| `currentPeriodEnd` | ISO string | 计费周期结束 |
+| `cancelAtPeriodEnd` | boolean | 是否周期末取消 |
+| `providerSubscriptionId` | string/null | 支付平台 ID |
+
+```json
+{
+  "id": "sub_01",
+  "workspaceId": "ws_01",
+  "planId": "free",
+  "status": "active",
+  "cancelAtPeriodEnd": false
+}
+```
+
+### Entitlement
+
+一个稳定功能或额度声明。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `id` | string | Entitlement ID |
+| `key` | string | 如 `publish.schedule` |
+| `type` | string | `boolean`、`quota`、`enum` |
+| `value` | boolean/number/string | 权限值 |
+| `source` | string | `plan`、`trial`、`override` |
+| `effectiveAt` | ISO string | 生效时间 |
+| `expiresAt` | ISO string/null | 过期时间 |
+
+```json
+{
+  "id": "ent_01",
+  "key": "publish.schedule",
+  "type": "boolean",
+  "value": true,
+  "source": "plan"
+}
+```
+
+### UsageQuota
+
+当前周期的额度聚合。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `id` | string | Quota ID |
+| `workspaceId` | string | Workspace |
+| `key` | string | `ai.adaptation` 等 |
+| `periodStart` | ISO string | 周期开始 |
+| `periodEnd` | ISO string | 周期结束 |
+| `limit` | number/null | 限制，null 表示不限 |
+| `used` | number | 已使用 |
+| `reserved` | number | 已预留未结算 |
+
+```json
+{
+  "id": "quota_01",
+  "workspaceId": "ws_01",
+  "key": "publish.batch",
+  "limit": 10,
+  "used": 3,
+  "reserved": 0
+}
+```
+
+### UsageRecord
+
+一次不可变用量事件。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `id` | string | Usage ID |
+| `workspaceId` | string | Workspace |
+| `key` | string | 用量类型 |
+| `quantity` | number | 数量 |
+| `resourceType` | string | 业务资源类型 |
+| `resourceId` | string | 业务资源 ID |
+| `idempotencyKey` | string | 防重复计量 |
+| `occurredAt` | ISO string | 发生时间 |
+
+```json
+{
+  "id": "usage_01",
+  "workspaceId": "ws_01",
+  "key": "ai.adaptation",
+  "quantity": 1,
+  "resourceType": "AIJob",
+  "resourceId": "aijob_01",
+  "idempotencyKey": "ai-run-01"
+}
+```
+
+### BillingCustomer
+
+Workspace 与支付平台客户的关系。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `id` | string | BillingCustomer ID |
+| `workspaceId` | string | Workspace |
+| `provider` | string | 支付 Provider |
+| `providerCustomerId` | string | Provider 客户 ID |
+| `billingEmail` | string | 账单邮箱 |
+| `taxMetadata` | object | 发票或税务元数据 |
+| `createdAt` | ISO string | 创建时间 |
+
+```json
+{
+  "id": "bc_01",
+  "workspaceId": "ws_01",
+  "provider": "billing-provider",
+  "providerCustomerId": "customer_01",
+  "billingEmail": "billing@example.test"
+}
+```
+
+## SaaS 根关系
+
+```text
+User -> WorkspaceMember -> Workspace
+Workspace -> Articles / Channels / PublishBatches / Usage
+Workspace -> BillingCustomer -> Subscription -> Plan
+Plan + overrides -> Entitlement
+Business operation -> UsageRecord -> UsageQuota
+```
+
+前端的 `createSaasState()` 和 `entitlements.js` 是这些模型的产品原型，不是服务端
+权威数据。

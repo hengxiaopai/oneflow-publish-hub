@@ -433,3 +433,17 @@ test("content library derives draft and published entries from local state", () 
   assert.ok(rows.some((row) => row.status === "已发布"));
   assert.ok(rows.every((row) => Number.isInteger(row.batchCount)));
 });
+
+test("browser app exposes a narrow bridge for the SaaS product shell", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "app.js"),
+    "utf8"
+  );
+
+  assert.match(source, /window\.OneFlowApp\s*=/);
+  assert.match(source, /getState\(\)/);
+  assert.match(source, /openLegacyView\(view\)/);
+  assert.match(source, /subscribe\(listener\)/);
+  assert.match(source, /createNewArticle\(\)/);
+  assert.match(source, /openImport\(\)/);
+});

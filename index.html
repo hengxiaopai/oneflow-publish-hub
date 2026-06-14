@@ -12,7 +12,51 @@
     <link rel="stylesheet" href="styles.css?v=2" />
   </head>
   <body>
-    <a class="skip-link" href="#editor-title">跳到文章编辑器</a>
+    <a class="skip-link" href="#main-content">跳到主要内容</a>
+
+    <section class="login-view saas-route-view" id="login-view" data-saas-view hidden>
+      <div class="login-ambient" aria-hidden="true"></div>
+      <div class="login-card">
+        <div class="login-brand">
+          <span class="brand-mark" aria-hidden="true">
+            <span></span><span></span><span></span>
+          </span>
+          <span>
+            <strong>OneFlow</strong>
+            <small>一文多发 SaaS</small>
+          </span>
+        </div>
+        <div class="login-copy">
+          <span class="eyebrow">Creator Publishing Hub</span>
+          <h1>把一篇内容，变成可追踪的多平台发布工作流。</h1>
+          <p>
+            内容库、AI 适配、渠道配置、发布任务与数据回流，在同一个创作者工作台完成。
+          </p>
+        </div>
+        <div class="login-options">
+          <article>
+            <span class="mode-label">Local Development</span>
+            <h2>本地开发模式</h2>
+            <p>继续使用浏览器本地工作区，适合产品验证与离线演示。</p>
+            <button class="primary-button" id="enter-local-mode" type="button">
+              进入本地工作台
+            </button>
+          </article>
+          <article>
+            <span class="mode-label">OneFlow Cloud</span>
+            <h2>SaaS 云端模式</h2>
+            <p>未来将支持账号、团队、服务端发布器、套餐与跨设备同步。</p>
+            <button class="secondary-button" id="show-cloud-placeholder" type="button">
+              登录 / 注册
+            </button>
+          </article>
+        </div>
+        <div class="cloud-auth-placeholder" id="cloud-auth-placeholder" hidden>
+          <strong>云端认证尚未接入</strong>
+          <p>当前版本不会收集账号或密码。正式认证将由后端 Session 服务提供。</p>
+        </div>
+      </div>
+    </section>
 
     <header class="top-shell">
       <div class="brand" aria-label="OneFlow 一文多发">
@@ -26,24 +70,16 @@
       </div>
 
       <nav class="glass top-nav" aria-label="主导航">
-        <button
-          class="nav-item is-active"
-          type="button"
-          data-app-view="workbench"
-          aria-current="page"
-        >
-          工作台
-        </button>
-        <button class="nav-item" type="button" data-app-view="library">内容库</button>
-        <button class="nav-item" type="button" data-app-view="history">
-          发布记录
-        </button>
-        <button class="nav-item" type="button">数据回流</button>
+        <a class="nav-item" href="#/dashboard" data-route-link>仪表盘</a>
+        <a class="nav-item" href="#/articles" data-route-link>内容库</a>
+        <a class="nav-item" href="#/workbench" data-route-link>写作工作台</a>
+        <a class="nav-item" href="#/publish-history" data-route-link>发布记录</a>
+        <a class="nav-item" href="#/channels" data-route-link>渠道设置</a>
       </nav>
 
       <div class="top-actions">
         <button
-          class="icon-button"
+          class="icon-button workbench-action"
           id="toggle-sidebar"
           type="button"
           aria-label="打开工作区导航"
@@ -52,7 +88,7 @@
           工作区
         </button>
         <button
-          class="icon-button"
+          class="icon-button workbench-action"
           id="toggle-queue"
           type="button"
           aria-label="打开发布队列"
@@ -60,15 +96,32 @@
         >
           队列 <span id="top-queue-count">14</span>
         </button>
-        <button class="profile-button" type="button" aria-label="当前账号：林墨">
+        <button
+          class="icon-button product-menu-button"
+          id="toggle-product-menu"
+          type="button"
+          aria-expanded="false"
+          aria-controls="product-menu"
+        >
+          产品
+        </button>
+        <button class="profile-button" type="button" aria-label="当前模式：本地开发">
           <span class="avatar">林</span>
           <span class="profile-copy">
-            <strong>林墨</strong>
-            <small>内容运营</small>
+            <strong>本地工作区</strong>
+            <small>Free · 开发模式</small>
           </span>
         </button>
       </div>
     </header>
+
+    <nav class="glass product-menu" id="product-menu" aria-label="全部产品导航" hidden>
+      <a href="#/media" data-route-link><span>图床 / 素材库</span><small>封面与平台裁剪</small></a>
+      <a href="#/ai-capabilities" data-route-link><span>AI 能力中心</span><small>Prompt 与执行策略</small></a>
+      <a href="#/billing" data-route-link><span>账单 / 套餐</span><small>额度与能力权限</small></a>
+      <a href="#/team" data-route-link><span>团队 / 成员</span><small>角色与协作边界</small></a>
+      <a href="#/settings" data-route-link><span>设置</span><small>工作区与安全</small></a>
+    </nav>
 
     <section class="agent-rail" id="agent-rail" aria-labelledby="agent-title">
       <div class="agent-heading">
@@ -400,13 +453,9 @@
             <h1>发布记录</h1>
             <p>本地保存每次发布批次，记录渠道结果与后续复用入口。</p>
           </div>
-          <button
-            class="secondary-button"
-            type="button"
-            data-app-view="workbench"
-          >
+          <a class="secondary-button" href="#/workbench" data-route-link>
             返回工作台
-          </button>
+          </a>
         </header>
         <div class="history-table" aria-label="本地发布批次">
           <div class="history-table-heading" aria-hidden="true">
@@ -429,13 +478,65 @@
             <h1>内容库</h1>
             <p>查看当前草稿与发布时保存的不可变文章快照。</p>
           </div>
-          <button class="secondary-button" type="button" data-app-view="workbench">
+          <a class="secondary-button" href="#/workbench" data-route-link>
             返回工作台
-          </button>
+          </a>
         </header>
         <div class="library-list" id="content-library-list"></div>
       </div>
     </section>
+
+    <main class="saas-main" id="main-content">
+      <section
+        class="saas-route-view"
+        id="dashboard-view"
+        data-saas-view
+        data-route="#/dashboard"
+        hidden
+      ></section>
+      <section
+        class="saas-route-view"
+        id="channels-view"
+        data-saas-view
+        data-route="#/channels"
+        hidden
+      ></section>
+      <section
+        class="saas-route-view"
+        id="media-view"
+        data-saas-view
+        data-route="#/media"
+        hidden
+      ></section>
+      <section
+        class="saas-route-view"
+        id="ai-capabilities-view"
+        data-saas-view
+        data-route="#/ai-capabilities"
+        hidden
+      ></section>
+      <section
+        class="saas-route-view"
+        id="billing-view"
+        data-saas-view
+        data-route="#/billing"
+        hidden
+      ></section>
+      <section
+        class="saas-route-view"
+        id="team-view"
+        data-saas-view
+        data-route="#/team"
+        hidden
+      ></section>
+      <section
+        class="saas-route-view"
+        id="settings-view"
+        data-saas-view
+        data-route="#/settings"
+        hidden
+      ></section>
+    </main>
 
     <footer
       class="glass publish-dock"
@@ -546,10 +647,13 @@
     </dialog>
 
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="shell-toast" id="shell-toast" role="status" aria-live="polite"></div>
     <div class="panel-scrim" id="panel-scrim" hidden></div>
 
     <script src="sanitizer.js?v=3"></script>
     <script src="storage.js?v=3"></script>
+    <script src="entitlements.js?v=1"></script>
     <script src="app.js?v=3"></script>
+    <script src="saas-shell.js?v=1"></script>
   </body>
 </html>
