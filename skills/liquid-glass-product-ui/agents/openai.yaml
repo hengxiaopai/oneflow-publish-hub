@@ -1,0 +1,4 @@
+interface:
+  display_name: "Liquid Glass Product UI"
+  short_description: "克制地设计内容优先的 Liquid Glass 产品界面"
+  default_prompt: "Use $liquid-glass-product-ui to design a readable, accessible Liquid Glass product interface."

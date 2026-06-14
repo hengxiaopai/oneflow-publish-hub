@@ -1,0 +1,489 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="一文多发内容发布中枢高保真前端原型"
+    />
+    <title>OneFlow Publish Hub</title>
+    <link rel="icon" href="data:," />
+    <link rel="stylesheet" href="styles.css?v=2" />
+  </head>
+  <body>
+    <a class="skip-link" href="#editor-title">跳到文章编辑器</a>
+
+    <header class="top-shell">
+      <div class="brand" aria-label="OneFlow 一文多发">
+        <span class="brand-mark" aria-hidden="true">
+          <span></span><span></span><span></span>
+        </span>
+        <span>
+          <strong>OneFlow</strong>
+          <small>一文多发</small>
+        </span>
+      </div>
+
+      <nav class="glass top-nav" aria-label="主导航">
+        <button
+          class="nav-item is-active"
+          type="button"
+          data-app-view="workbench"
+          aria-current="page"
+        >
+          工作台
+        </button>
+        <button class="nav-item" type="button">内容库</button>
+        <button class="nav-item" type="button" data-app-view="history">
+          发布记录
+        </button>
+        <button class="nav-item" type="button">数据回流</button>
+      </nav>
+
+      <div class="top-actions">
+        <button
+          class="icon-button"
+          id="toggle-sidebar"
+          type="button"
+          aria-label="打开工作区导航"
+          aria-expanded="false"
+        >
+          工作区
+        </button>
+        <button
+          class="icon-button"
+          id="toggle-queue"
+          type="button"
+          aria-label="打开发布队列"
+          aria-expanded="false"
+        >
+          队列 <span id="top-queue-count">14</span>
+        </button>
+        <button class="profile-button" type="button" aria-label="当前账号：林墨">
+          <span class="avatar">林</span>
+          <span class="profile-copy">
+            <strong>林墨</strong>
+            <small>内容运营</small>
+          </span>
+        </button>
+      </div>
+    </header>
+
+    <section class="agent-rail" id="agent-rail" aria-labelledby="agent-title">
+      <div class="agent-heading">
+        <span class="agent-orb" aria-hidden="true">
+          <span class="orb-core"></span>
+        </span>
+        <span>
+          <small>AI Publish Agent</small>
+          <strong id="agent-title">正在适配 14 个渠道版本</strong>
+        </span>
+      </div>
+      <ol class="agent-stages" aria-label="发布流程阶段">
+        <li class="is-complete" data-short="分析">
+          <span>01</span>
+          <span class="stage-copy"><strong>Analyze</strong><small>内容分析</small></span>
+        </li>
+        <li class="is-active" data-short="适配" aria-current="step">
+          <span>02</span>
+          <span class="stage-copy"><strong>Adapt</strong><small>多平台适配</small></span>
+        </li>
+        <li data-short="确认">
+          <span>03</span>
+          <span class="stage-copy"><strong>Review</strong><small>人工确认</small></span>
+        </li>
+        <li data-short="授权">
+          <span>04</span>
+          <span class="stage-copy"><strong>Authorize</strong><small>授权检查</small></span>
+        </li>
+        <li data-short="发布">
+          <span>05</span>
+          <span class="stage-copy"><strong>Publish</strong><small>批量发布</small></span>
+        </li>
+        <li data-short="回流">
+          <span>06</span>
+          <span class="stage-copy"><strong>Feedback</strong><small>数据回流</small></span>
+        </li>
+      </ol>
+      <div class="agent-summary" aria-label="当前发布状态摘要">
+        <span><strong>1</strong> 就绪</span>
+        <span><strong>7</strong> 待确认</span>
+        <span><strong>3</strong> 再加工</span>
+        <span><strong>2</strong> 异常</span>
+      </div>
+    </section>
+
+    <main class="workspace" id="workbench-view">
+      <aside class="workspace-sidebar" id="workspace-sidebar" aria-label="工作区导航">
+        <div class="sidebar-header">
+          <div>
+            <span class="eyebrow">当前工作区</span>
+            <h2>技术内容引擎</h2>
+          </div>
+          <div class="sidebar-header-actions">
+            <button
+              class="text-button"
+              id="reset-demo"
+              type="button"
+              aria-label="重置演示数据"
+            >
+              重置
+            </button>
+          </div>
+        </div>
+
+        <nav class="side-nav" aria-label="内容工作区">
+          <button class="side-nav-item is-active" type="button">
+            <span>工作台</span><b>8</b>
+          </button>
+          <button class="side-nav-item" type="button">
+            <span>内容资产</span><b>256</b>
+          </button>
+          <button class="side-nav-item" type="button">
+            <span>草稿</span><b>12</b>
+          </button>
+          <button class="side-nav-item" type="button">
+            <span>平台账号</span><b>14</b>
+          </button>
+        </nav>
+
+        <section class="draft-list" aria-labelledby="draft-title">
+          <div class="section-title-row">
+            <h3 id="draft-title">最近草稿</h3>
+            <button class="text-button" type="button">查看全部</button>
+          </div>
+          <button class="draft-item is-active" type="button">
+            <strong>从单体应用到 AI Agent</strong>
+            <span>刚刚自动保存</span>
+          </button>
+          <button class="draft-item" type="button">
+            <strong>RAG 实践指南：从原理到落地</strong>
+            <span>今天 09:24</span>
+          </button>
+          <button class="draft-item" type="button">
+            <strong>提示词工程的系统化方法</strong>
+            <span>昨天 16:40</span>
+          </button>
+        </section>
+
+        <section class="account-health" aria-labelledby="account-title">
+          <div class="section-title-row">
+            <h3 id="account-title">平台账号</h3>
+            <button class="text-button" type="button">管理</button>
+          </div>
+          <div class="health-row">
+            <span>授权正常</span>
+            <strong>12</strong>
+          </div>
+          <div class="health-row is-warning">
+            <span>需要处理</span>
+            <strong>2</strong>
+          </div>
+        </section>
+      </aside>
+
+      <article class="editor-surface" aria-labelledby="editor-title">
+        <div class="editor-toolbar" role="toolbar" aria-label="文章编辑工具">
+          <div class="toolbar-group">
+            <button type="button" aria-label="撤销">撤销</button>
+            <button type="button" aria-label="重做">重做</button>
+          </div>
+          <div class="toolbar-group toolbar-format">
+            <button type="button">正文</button>
+            <button type="button"><strong>B</strong></button>
+            <button type="button"><em>I</em></button>
+            <button type="button">链接</button>
+            <button type="button">列表</button>
+          </div>
+          <div class="toolbar-more-wrap">
+            <button
+              class="toolbar-more-button"
+              id="toolbar-more"
+              type="button"
+              aria-expanded="false"
+              aria-controls="toolbar-more-menu"
+            >
+              更多工具
+            </button>
+            <div
+              class="toolbar-more-menu"
+              id="toolbar-more-menu"
+              role="menu"
+              hidden
+            >
+              <button type="button" role="menuitem" data-editor-tool="title">标题</button>
+              <button type="button" role="menuitem" data-editor-tool="bold">加粗</button>
+              <button type="button" role="menuitem" data-editor-tool="link">链接</button>
+              <button type="button" role="menuitem" data-editor-tool="list">列表</button>
+              <button type="button" role="menuitem" data-editor-tool="image">图片</button>
+              <button type="button" role="menuitem" data-editor-tool="ai">AI 助手</button>
+              <button type="button" role="menuitem" data-editor-tool="seo">SEO 摘要</button>
+              <button type="button" role="menuitem" data-editor-tool="preview">阅读预览</button>
+            </div>
+          </div>
+          <div class="toolbar-spacer"></div>
+          <button
+            class="toolbar-status"
+            id="save-status"
+            type="button"
+            aria-live="polite"
+            data-save-state="saved"
+          >
+            已保存
+          </button>
+          <button class="editor-preview-button" type="button" data-preview="article">
+            阅读预览
+          </button>
+        </div>
+
+        <div class="editor-document">
+          <div class="tag-editor" aria-label="文章标签">
+            <div class="document-kicker" id="article-tags"></div>
+            <div class="tag-add">
+              <input
+                id="tag-input"
+                type="text"
+                maxlength="20"
+                placeholder="添加标签"
+                aria-label="新标签"
+              />
+              <button id="tag-add-button" type="button">添加</button>
+            </div>
+          </div>
+
+          <h1 id="editor-title" contenteditable="true" spellcheck="false">
+            从单体应用到 AI Agent：一次内容工作流重构
+          </h1>
+
+          <p
+            class="article-deck"
+            id="article-summary"
+            contenteditable="true"
+            spellcheck="false"
+          >
+            当内容生产从单一渠道走向多平台协作，真正需要重构的不是发布按钮，而是分析、适配、确认与回流之间的整条工作链路。
+          </p>
+
+          <figure class="cover-figure">
+            <img
+              src="assets/article-cover.png"
+              alt="一个内容节点分发为多个渠道版本的抽象工作流"
+            />
+            <figcaption>
+              <span
+                id="cover-description"
+                contenteditable="true"
+                spellcheck="false"
+              >
+                封面已生成 16:9、4:3 与 3:4 三种裁切版本
+              </span>
+              <button type="button">更换封面</button>
+            </figcaption>
+          </figure>
+
+          <section
+            class="article-body"
+            id="article-body"
+            contenteditable="true"
+            spellcheck="false"
+          >
+            <h2>一、为什么发布流程需要被重新设计</h2>
+            <p>
+              过去几年，我们的内容生产仍沿用“写完、复制、粘贴、逐个平台检查”的方式。渠道数量增加后，标题长度、摘要结构、代码块、封面比例和话题规则开始彼此冲突。
+            </p>
+            <p>
+              这次重构把一篇文章视作内容源，把每个平台版本视作独立交付物。AI
+              Agent 负责识别结构和平台约束，人负责做关键判断。
+            </p>
+
+            <blockquote>
+              自动化的目标不是跳过人工，而是把人工判断留给真正需要判断的地方。
+            </blockquote>
+
+            <h2>二、从单体脚本到六阶段发布链路</h2>
+            <p>
+              新链路由 Analyze、Adapt、Review、Authorize、Publish 与 Feedback
+              六个阶段组成。文章平台优先保持结构一致，图文与短视频平台则进入内容再加工流程。
+            </p>
+
+            <h3>文章渠道：保留结构，适配平台约束</h3>
+            <ul>
+              <li>保留标题层级、代码块和关键链接。</li>
+              <li>根据平台规则调整摘要、标签与封面。</li>
+              <li>无法自动发布的平台生成草稿或复制稿。</li>
+            </ul>
+          </section>
+        </div>
+
+        <footer class="editor-footer">
+          <span><strong id="word-count">3,286</strong> 字</span>
+          <span>预计阅读 <strong id="reading-minutes">9</strong> 分钟</span>
+          <span>SEO 摘要 <strong id="seo-count">142</strong> / 160</span>
+          <button type="button">版本记录</button>
+        </footer>
+      </article>
+
+      <aside class="glass publish-queue" id="publish-queue" aria-labelledby="queue-title">
+        <div class="queue-header">
+          <div>
+            <span class="eyebrow">Publish Queue</span>
+            <h2 id="queue-title">平台发布队列</h2>
+          </div>
+          <button
+            class="close-panel-button"
+            id="close-queue"
+            type="button"
+            aria-label="关闭发布队列"
+          >
+            关闭
+          </button>
+        </div>
+
+        <div class="queue-overview">
+          <span><strong id="queue-ready-count">1</strong> 就绪</span>
+          <span><strong id="queue-review-count">7</strong> 待确认</span>
+          <span><strong id="queue-issue-count">6</strong> 需处理</span>
+        </div>
+
+        <div class="queue-filter" role="group" aria-label="发布队列筛选">
+          <button class="is-active" type="button" data-filter="all">全部</button>
+          <button type="button" data-filter="selected">已选择</button>
+          <button type="button" data-filter="attention">需处理</button>
+        </div>
+
+        <div class="queue-density" role="group" aria-label="队列视图密度">
+          <span>视图</span>
+          <button
+            class="is-active"
+            type="button"
+            data-queue-density="comfortable"
+          >
+            舒适
+          </button>
+          <button type="button" data-queue-density="compact">紧凑</button>
+        </div>
+
+        <div class="queue-groups" id="queue-groups"></div>
+      </aside>
+    </main>
+
+    <section class="publish-history-view" id="publish-history-view" hidden>
+      <div class="history-paper">
+        <header class="history-header">
+          <div>
+            <span class="eyebrow">Publish History</span>
+            <h1>发布记录</h1>
+            <p>本地保存每次发布批次，记录渠道结果与后续复用入口。</p>
+          </div>
+          <button
+            class="secondary-button"
+            type="button"
+            data-app-view="workbench"
+          >
+            返回工作台
+          </button>
+        </header>
+        <div class="history-table" aria-label="本地发布批次">
+          <div class="history-table-heading" aria-hidden="true">
+            <span>发布时间</span>
+            <span>文章与渠道</span>
+            <span>结果</span>
+            <span>发布策略</span>
+            <span>操作</span>
+          </div>
+          <div id="publish-history-list"></div>
+        </div>
+      </div>
+    </section>
+
+    <footer
+      class="glass publish-dock"
+      id="publish-dock"
+      aria-label="批量发布控制"
+    >
+      <div class="dock-summary">
+        <span class="dock-label">本次发布</span>
+        <strong id="publish-summary">
+          已选 <span id="selected-count">4</span> 个渠道 ·
+          <span id="summary-ready-count">1</span> 个就绪 ·
+          <span id="attention-count">3</span> 个待确认
+        </strong>
+      </div>
+
+      <div class="dock-field">
+        <label for="publish-time">发布时间</label>
+        <select id="publish-time">
+          <option value="now">立即发布</option>
+          <option value="scheduled">定时发布 · 今天 20:30</option>
+        </select>
+      </div>
+
+      <div class="dock-field">
+        <label for="publish-strategy">发布策略</label>
+        <select id="publish-strategy">
+          <option>自动优先，失败重试</option>
+          <option>逐个平台人工确认</option>
+          <option>仅生成平台草稿</option>
+        </select>
+      </div>
+
+      <div class="dock-field">
+        <label for="post-action">发布后动作</label>
+        <select id="post-action">
+          <option>回写数据并通知</option>
+          <option>回写数据并生成复盘</option>
+          <option>仅记录发布结果</option>
+        </select>
+      </div>
+
+      <div class="dock-estimate">
+        <span>预计耗时</span>
+        <strong><span id="publish-estimate">2</span> 分钟</strong>
+      </div>
+
+      <button class="primary-button" id="publish-button" type="button">
+        发布 <span id="ready-count">1</span> 个就绪渠道
+      </button>
+    </footer>
+
+    <dialog class="preview-dialog" id="preview-dialog">
+      <form method="dialog" class="preview-card">
+        <header class="preview-header">
+          <div>
+            <span class="eyebrow">Channel Preview</span>
+            <h2 id="preview-title">平台版本预览</h2>
+          </div>
+          <button class="small-button" value="close">关闭</button>
+        </header>
+        <div class="preview-meta" id="preview-meta"></div>
+        <div class="preview-content" id="preview-content"></div>
+        <footer class="preview-actions">
+          <button
+            class="secondary-button"
+            id="preview-back"
+            value="close"
+          >
+            返回修改
+          </button>
+          <button
+            class="secondary-button"
+            id="preview-copy"
+            type="button"
+          >
+            复制到平台
+          </button>
+          <button class="primary-button" id="preview-confirm" value="close">
+            确认并加入发布批次
+          </button>
+        </footer>
+      </form>
+    </dialog>
+
+    <div class="toast" id="toast" role="status" aria-live="polite"></div>
+    <div class="panel-scrim" id="panel-scrim" hidden></div>
+
+    <script src="storage.js?v=2"></script>
+    <script src="app.js?v=2"></script>
+  </body>
+</html>
