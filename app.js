@@ -1,5 +1,10 @@
 "use strict";
 
+const sanitizeHtml =
+  typeof module !== "undefined" && module.exports
+    ? require("./sanitizer.js").sanitizeHtml
+    : window.OneFlowSanitizer.sanitizeHtml;
+
 const CHANNEL_GROUPS = {
   automatic: {
     title: "可自动发布",
@@ -82,11 +87,36 @@ const INITIAL_ARTICLE = Object.freeze({
       <li>无法自动发布的平台生成草稿或复制稿。</li>
     </ul>
   `.trim(),
-  coverDescription: "封面已生成 16:9、4:3 与 3:4 三种裁切版本",
   wordCount: 3286,
   readingMinutes: 9,
   seoSummaryLength: 142,
-  coverAsset: "assets/article-cover.png",
+  cover: {
+    sourceType: "generated",
+    url: "assets/article-cover.png",
+    alt: "一个内容节点分发为多个渠道版本的抽象工作流",
+    aspectRatio: "16:9",
+    description: "封面已生成 16:9、4:3 与 3:4 三种裁切版本",
+    platformCrops: [
+      {
+        platformId: "article",
+        ratio: "16:9",
+        cropHint: "保留中心内容节点与左右分发路径",
+        status: "ready",
+      },
+      {
+        platformId: "xiaohongshu",
+        ratio: "3:4",
+        cropHint: "聚焦中心标题与上半区节点",
+        status: "ready",
+      },
+      {
+        platformId: "toutiao",
+        ratio: "4:3",
+        cropHint: "保留主标题与三条渠道路径",
+        status: "ready",
+      },
+    ],
+  },
   tags: ["架构设计", "AI Agent", "内容工作流"],
   createdAt: "2026-06-12T14:20:00+08:00",
   updatedAt: "2026-06-13T00:00:00+08:00",
@@ -428,7 +458,7 @@ function createProductState() {
   );
 
   return {
-    article: { ...INITIAL_ARTICLE, tags: [...INITIAL_ARTICLE.tags] },
+    currentArticle: cloneProductState(INITIAL_ARTICLE),
     channels: seeds.map((seed) => ({
       id: seed.id,
       platform: seed.platform,
@@ -482,6 +512,7 @@ function createProductState() {
       channelId: seed.id,
       channelVersionId: `${seed.id}-version-001`,
       batchId: null,
+      scope: "workspace",
       status: statusCodeFromSeed(seed),
       action: seed.action,
       retryCount: 0,
@@ -491,6 +522,8 @@ function createProductState() {
       feedback: null,
     })),
     publishBatches: [],
+    articleSnapshots: [],
+    channelVersionSnapshots: [],
     validationIssues,
     workspaceSettings: {
       queueDensity: "comfortable",
@@ -538,12 +571,24 @@ function mergePersistedState(defaultState, persistedState) {
 
   return {
     ...cloneProductState(defaultState),
-    article: {
-      ...cloneProductState(defaultState.article),
-      ...(persistedState.article || {}),
-      tags: Array.isArray(persistedState.article?.tags)
-        ? [...persistedState.article.tags]
-        : [...defaultState.article.tags],
+    currentArticle: {
+      ...cloneProductState(defaultState.currentArticle),
+      ...(persistedState.currentArticle || persistedState.article || {}),
+      cover: {
+        ...cloneProductState(defaultState.currentArticle.cover),
+        ...cloneProductState(
+          persistedState.currentArticle?.cover ||
+            persistedState.article?.cover ||
+            {}
+        ),
+      },
+      tags: Array.isArray(
+        (persistedState.currentArticle || persistedState.article)?.tags
+      )
+        ? [
+            ...(persistedState.currentArticle || persistedState.article).tags,
+          ]
+        : [...defaultState.currentArticle.tags],
     },
     channels: mergeRecordCollections(
       defaultState.channels,
@@ -557,16 +602,31 @@ function mergePersistedState(defaultState, persistedState) {
       defaultState.channelVersions,
       persistedState.channelVersions
     ),
-    publishTasks: mergeRecordCollections(
-      defaultState.publishTasks,
-      persistedState.publishTasks
-    ),
+    publishTasks: [
+      ...mergeRecordCollections(
+        defaultState.publishTasks,
+        (persistedState.publishTasks || []).filter(
+          (task) => !task.batchId && task.scope !== "batch"
+        )
+      ),
+      ...(persistedState.publishTasks || [])
+        .filter((task) => task.batchId || task.scope === "batch")
+        .map(cloneProductState),
+    ],
     publishBatches: Array.isArray(persistedState.publishBatches)
       ? cloneProductState(persistedState.publishBatches)
       : cloneProductState(defaultState.publishBatches),
     validationIssues: Array.isArray(persistedState.validationIssues)
       ? cloneProductState(persistedState.validationIssues)
       : cloneProductState(defaultState.validationIssues),
+    articleSnapshots: Array.isArray(persistedState.articleSnapshots)
+      ? cloneProductState(persistedState.articleSnapshots)
+      : [],
+    channelVersionSnapshots: Array.isArray(
+      persistedState.channelVersionSnapshots
+    )
+      ? cloneProductState(persistedState.channelVersionSnapshots)
+      : [],
     workspaceSettings: {
       ...cloneProductState(defaultState.workspaceSettings),
       ...(persistedState.workspaceSettings || {}),
@@ -597,16 +657,26 @@ function updateArticleContent(state, patch, updatedAt = new Date().toISOString()
     "summary",
     "bodyHtml",
     "tags",
-    "coverDescription",
+    "cover",
   ]);
   const hasContentChange = Object.keys(patch).some((key) =>
     contentFields.has(key)
   );
 
-  nextState.article = {
-    ...nextState.article,
+  const nextCover = patch.cover
+    ? { ...nextState.currentArticle.cover, ...patch.cover }
+    : nextState.currentArticle.cover;
+  nextState.currentArticle = {
+    ...nextState.currentArticle,
     ...patch,
-    tags: patch.tags ? [...patch.tags] : [...nextState.article.tags],
+    bodyHtml:
+      patch.bodyHtml === undefined
+        ? nextState.currentArticle.bodyHtml
+        : sanitizeHtml(patch.bodyHtml),
+    cover: nextCover,
+    tags: patch.tags
+      ? [...patch.tags]
+      : [...nextState.currentArticle.tags],
     updatedAt,
   };
 
@@ -667,7 +737,7 @@ function readaptChannelVersion(
   );
 
   version.versionStatus = "current";
-  version.sourceArticleUpdatedAt = nextState.article.updatedAt;
+  version.sourceArticleUpdatedAt = nextState.currentArticle.updatedAt;
   version.updatedAt = updatedAt;
   version.adaptationProgress = 100;
   nextState.validationIssues = nextState.validationIssues.map((issue) =>
@@ -959,10 +1029,6 @@ function createPublishBatch(state, options = {}) {
     3,
     "0"
   )}`;
-  const taskIds = readyChannels.map(
-    (channel) =>
-      state.publishTasks.find((task) => task.channelId === channel.id).id
-  );
   const createdAt = options.now || new Date().toISOString();
   const automaticChannelIds = readyChannels
     .filter((channel) => channel.capability.supportsAutomaticPublish)
@@ -975,10 +1041,48 @@ function createPublishBatch(state, options = {}) {
       : successCount > 0
         ? PUBLISH_STATUS.PARTIAL
         : PUBLISH_STATUS.QUEUED;
+  const articleSnapshot = {
+    ...cloneProductState(state.currentArticle),
+    id: `${batchId}-article-snapshot`,
+    sourceArticleId: state.currentArticle.id,
+    bodyHtml: sanitizeHtml(state.currentArticle.bodyHtml),
+    createdAt,
+  };
+  const channelVersionSnapshots = readyChannels.map((channel) => ({
+    ...cloneProductState(channel.version),
+    id: `${batchId}-${channel.id}-version-snapshot`,
+    sourceChannelVersionId: channel.version.id,
+    createdAt,
+  }));
+  const batchTasks = readyChannels.map((channel) => {
+    const automatic = automaticChannelIds.includes(channel.id);
+    const versionSnapshot = channelVersionSnapshots.find(
+      (snapshot) => snapshot.channelId === channel.id
+    );
+    return {
+      id: `${batchId}-${channel.id}-task`,
+      scope: "batch",
+      batchId,
+      channelId: channel.id,
+      channelVersionId: channel.version.id,
+      channelVersionSnapshotId: versionSnapshot.id,
+      status: automatic ? PUBLISH_STATUS.PUBLISHED : PUBLISH_STATUS.QUEUED,
+      action: automatic ? "查看结果" : "复制到平台",
+      retryCount: 0,
+      maxRetries: 2,
+      lastError: channel.publishTask.lastError,
+      publishedUrl: automatic
+        ? `https://blog.example.com/${state.currentArticle.slug}`
+        : null,
+      feedback: null,
+      createdAt,
+    };
+  });
+  const taskIds = batchTasks.map((task) => task.id);
   const batch = {
     id: batchId,
-    articleId: state.article.id,
-    articleTitle: state.article.title,
+    articleId: state.currentArticle.id,
+    articleSnapshotId: articleSnapshot.id,
     taskIds,
     channelIds: readyChannels.map((channel) => channel.id),
     channelCount: readyChannels.length,
@@ -995,21 +1099,29 @@ function createPublishBatch(state, options = {}) {
   };
   const nextState = {
     ...state,
-    publishTasks: state.publishTasks.map((task) =>
-      taskIds.includes(task.id)
+    publishTasks: [
+      ...state.publishTasks.map((task) =>
+      !task.batchId &&
+      readyChannels.some((channel) => channel.id === task.channelId)
         ? {
             ...task,
-            batchId,
             status: automaticChannelIds.includes(task.channelId)
               ? PUBLISH_STATUS.PUBLISHED
               : PUBLISH_STATUS.QUEUED,
             publishedUrl: automaticChannelIds.includes(task.channelId)
-              ? `https://blog.example.com/${state.article.slug}`
+              ? `https://blog.example.com/${state.currentArticle.slug}`
               : null,
           }
         : { ...task }
-    ),
+      ),
+      ...batchTasks,
+    ],
     publishBatches: [...state.publishBatches, batch],
+    articleSnapshots: [...(state.articleSnapshots || []), articleSnapshot],
+    channelVersionSnapshots: [
+      ...(state.channelVersionSnapshots || []),
+      ...channelVersionSnapshots,
+    ],
   };
 
   return { state: nextState, batch, readyChannels };
@@ -1018,10 +1130,17 @@ function createPublishBatch(state, options = {}) {
 function getPublishHistoryRows(state) {
   return [...state.publishBatches]
     .sort((a, b) => String(b.createdAt).localeCompare(String(a.createdAt)))
-    .map((batch) => ({
+    .map((batch) => {
+      const snapshot = (state.articleSnapshots || []).find(
+        (item) => item.id === batch.articleSnapshotId
+      );
+      return {
       id: batch.id,
       publishedAt: batch.createdAt,
-      articleTitle: batch.articleTitle || state.article.title,
+      articleTitle:
+        snapshot?.title ||
+        batch.articleTitle ||
+        state.currentArticle.title,
       channelCount: batch.channelCount ?? batch.taskIds.length,
       successCount: batch.successCount ?? 0,
       pendingCount: batch.pendingCount ?? 0,
@@ -1029,7 +1148,86 @@ function getPublishHistoryRows(state) {
       strategy: batch.strategy,
       status: batch.status,
       channelIds: [...(batch.channelIds || [])],
-    }));
+      };
+    });
+}
+
+function getPublishBatchDetail(state, batchId) {
+  const batch = state.publishBatches.find((item) => item.id === batchId);
+  if (!batch) return null;
+  const articleSnapshot = (state.articleSnapshots || []).find(
+    (item) => item.id === batch.articleSnapshotId
+  );
+  const tasks = (batch.taskIds || [])
+    .map((taskId) => state.publishTasks.find((task) => task.id === taskId))
+    .filter(Boolean)
+    .map((task) => {
+      const channel = state.channels.find(
+        (item) => item.id === task.channelId
+      );
+      const versionSnapshot = (state.channelVersionSnapshots || []).find(
+        (item) => item.id === task.channelVersionSnapshotId
+      );
+      return {
+        ...cloneProductState(task),
+        platform: channel?.platform || task.channelId,
+        type: channel?.type || "文章",
+        versionTitle: versionSnapshot?.title || "未命名平台版本",
+        deliveryMethod: versionSnapshot?.deliveryMethod || "待验证",
+        copyText: `${versionSnapshot?.title || articleSnapshot?.title || ""}\n\n${
+          versionSnapshot?.detail || articleSnapshot?.summary || ""
+        }`,
+      };
+    });
+  return {
+    ...cloneProductState(batch),
+    articleTitle:
+      articleSnapshot?.title ||
+      batch.articleTitle ||
+      state.currentArticle.title,
+    articleSnapshot: cloneProductState(articleSnapshot),
+    tasks,
+  };
+}
+
+function getContentLibraryRows(state) {
+  const rows = [
+    {
+      id: state.currentArticle.id,
+      source: "current",
+      status: "草稿",
+      title: state.currentArticle.title,
+      updatedAt: state.currentArticle.updatedAt,
+      wordCount: state.currentArticle.wordCount || 0,
+      batchCount: state.publishBatches.filter(
+        (batch) => batch.articleId === state.currentArticle.id
+      ).length,
+    },
+  ];
+  const published = new Map();
+  (state.articleSnapshots || []).forEach((snapshot) => {
+    const sourceId = snapshot.sourceArticleId || snapshot.id;
+    const existing = published.get(sourceId);
+    if (!existing || String(snapshot.createdAt) > String(existing.updatedAt)) {
+      published.set(sourceId, {
+        id: snapshot.id,
+        source: "snapshot",
+        status: "已发布",
+        title: snapshot.title,
+        updatedAt: snapshot.createdAt,
+        wordCount: snapshot.wordCount || 0,
+        batchCount: state.publishBatches.filter(
+          (batch) =>
+            (state.articleSnapshots || []).find(
+              (item) =>
+                item.id === batch.articleSnapshotId &&
+                item.sourceArticleId === sourceId
+            )
+        ).length,
+      });
+    }
+  });
+  return [...rows, ...published.values()];
 }
 
 function reusePublishBatch(state, batchId) {
@@ -1043,6 +1241,7 @@ function reusePublishBatch(state, batchId) {
     selected: selectedIds.has(channel.id),
   }));
   nextState.publishTasks = nextState.publishTasks.map((task) => {
+    if (task.scope === "batch" || task.batchId) return task;
     if (!selectedIds.has(task.channelId)) return task;
     const channel = nextState.channels.find(
       (item) => item.id === task.channelId
@@ -1185,6 +1384,8 @@ if (typeof module !== "undefined" && module.exports) {
     estimatePublishMinutes,
     formatPublishSummary,
     getChannelViews,
+    getContentLibraryRows,
+    getPublishBatchDetail,
     getPublishHistoryRows,
     groupChannels,
     getReadyChannels,
@@ -1219,6 +1420,8 @@ if (typeof document !== "undefined") {
   let currentPreviewText = "";
   let toastTimer = null;
   let saveTimer = null;
+  let pendingImportState = null;
+  let storageRecoveryRequired = !restoredSnapshot.ok;
 
   const queueGroups = document.querySelector("#queue-groups");
   const publishSummary = document.querySelector("#publish-summary");
@@ -1248,6 +1451,8 @@ if (typeof document !== "undefined") {
   const articleSummary = document.querySelector("#article-summary");
   const articleBody = document.querySelector("#article-body");
   const coverDescription = document.querySelector("#cover-description");
+  const coverImage = document.querySelector("#cover-image");
+  const coverAlt = document.querySelector("#cover-alt");
   const articleTags = document.querySelector("#article-tags");
   const tagInput = document.querySelector("#tag-input");
   const tagAddButton = document.querySelector("#tag-add-button");
@@ -1262,6 +1467,17 @@ if (typeof document !== "undefined") {
   const publishHistoryList = document.querySelector(
     "#publish-history-list"
   );
+  const contentLibraryView = document.querySelector("#content-library-view");
+  const contentLibraryList = document.querySelector("#content-library-list");
+  const exportWorkspaceButton = document.querySelector("#export-workspace");
+  const importWorkspaceButton = document.querySelector("#import-workspace");
+  const importWorkspaceFile = document.querySelector(
+    "#import-workspace-file"
+  );
+  const importDialog = document.querySelector("#import-dialog");
+  const importSummary = document.querySelector("#import-summary");
+  const confirmImport = document.querySelector("#confirm-import");
+  const recoveryNotice = document.querySelector("#data-recovery-notice");
   const agentRail = document.querySelector("#agent-rail");
   const publishDock = document.querySelector("#publish-dock");
   const previewBack = document.querySelector("#preview-back");
@@ -1301,12 +1517,12 @@ if (typeof document !== "undefined") {
   }
 
   function saveNow() {
-    if (!stateStore) {
+    if (!stateStore || storageRecoveryRequired) {
       setSaveStatus("failed");
       return false;
     }
     const savedAt = new Date().toISOString();
-    productState.article.savedAt = savedAt;
+    productState.currentArticle.savedAt = savedAt;
     const result = stateStore.save(productState);
     if (!result.ok) {
       setSaveStatus("failed");
@@ -1324,7 +1540,7 @@ if (typeof document !== "undefined") {
 
   function renderTags() {
     articleTags.replaceChildren();
-    productState.article.tags.forEach((tag) => {
+    productState.currentArticle.tags.forEach((tag) => {
       const item = document.createElement("span");
       item.className = "article-tag";
       const label = document.createElement("span");
@@ -1345,7 +1561,7 @@ if (typeof document !== "undefined") {
       summary: articleSummary.innerText,
       bodyText: articleBody.innerText,
     });
-    Object.assign(productState.article, metrics);
+    Object.assign(productState.currentArticle, metrics);
     wordCount.textContent = metrics.wordCount.toLocaleString("zh-CN");
     readingMinutes.textContent = metrics.readingMinutes;
     seoCount.textContent = metrics.seoSummaryLength;
@@ -1356,15 +1572,18 @@ if (typeof document !== "undefined") {
   }
 
   function hydrateEditor() {
-    editorTitle.textContent = productState.article.title;
-    articleSummary.textContent = productState.article.summary;
-    articleBody.innerHTML = productState.article.bodyHtml;
-    coverDescription.textContent = productState.article.coverDescription;
+    editorTitle.textContent = productState.currentArticle.title;
+    articleSummary.textContent = productState.currentArticle.summary;
+    articleBody.innerHTML = sanitizeHtml(productState.currentArticle.bodyHtml);
+    coverDescription.textContent = productState.currentArticle.cover.description;
+    coverImage.src = productState.currentArticle.cover.url;
+    coverImage.alt = productState.currentArticle.cover.alt;
+    coverAlt.value = productState.currentArticle.cover.alt;
     renderTags();
     updateEditorMetrics();
     setSaveStatus(
       restoredSnapshot.ok ? "saved" : "failed",
-      productState.article.savedAt || restoredSnapshot.savedAt
+      productState.currentArticle.savedAt || restoredSnapshot.savedAt
     );
   }
 
@@ -1377,8 +1596,8 @@ if (typeof document !== "undefined") {
 
   function addTag() {
     const tag = tagInput.value.trim();
-    if (!tag || productState.article.tags.includes(tag)) return;
-    applyArticlePatch({ tags: [...productState.article.tags, tag] });
+    if (!tag || productState.currentArticle.tags.includes(tag)) return;
+    applyArticlePatch({ tags: [...productState.currentArticle.tags, tag] });
     tagInput.value = "";
     renderTags();
   }
@@ -1420,12 +1639,43 @@ if (typeof document !== "undefined") {
       .join("");
   }
 
+  function renderContentLibrary() {
+    const rows = getContentLibraryRows(productState);
+    contentLibraryList.innerHTML = rows
+      .map(
+        (row) => `
+          <article class="library-row" data-library-id="${row.id}">
+            <div>
+              <span class="status-chip">${row.status}</span>
+              <strong>${escapeHtml(row.title)}</strong>
+              <small>最近修改 ${formatLocalTime(row.updatedAt)}</small>
+            </div>
+            <span>${Number(row.wordCount).toLocaleString("zh-CN")} 字</span>
+            <span>${row.batchCount} 个发布批次</span>
+            <div class="history-actions">
+              <button type="button" data-library-open="${row.id}">打开编辑</button>
+              <button type="button" data-library-copy="${row.id}">复制为新文章</button>
+              <button type="button" data-library-delete="${row.id}" ${
+                row.source === "snapshot"
+                  ? 'disabled title="发布快照由历史批次引用，不能单独删除"'
+                  : ""
+              }>删除</button>
+            </div>
+          </article>
+        `
+      )
+      .join("");
+  }
+
   function switchView(view, persist = true) {
     const isHistory = view === "history";
-    workbenchView.hidden = isHistory;
-    agentRail.hidden = isHistory;
-    publishDock.hidden = isHistory;
+    const isLibrary = view === "library";
+    const isWorkbench = view === "workbench";
+    workbenchView.hidden = !isWorkbench;
+    agentRail.hidden = !isWorkbench;
+    publishDock.hidden = !isWorkbench;
     publishHistoryView.hidden = !isHistory;
+    contentLibraryView.hidden = !isLibrary;
     document.querySelectorAll(".top-nav [data-app-view]").forEach((button) => {
       const active = button.dataset.appView === view;
       button.classList.toggle("is-active", active);
@@ -1434,6 +1684,7 @@ if (typeof document !== "undefined") {
     });
     productState.workspaceSettings.activeView = view;
     if (isHistory) renderPublishHistory();
+    if (isLibrary) renderContentLibrary();
     if (persist) saveNow();
   }
 
@@ -1608,10 +1859,10 @@ if (typeof document !== "undefined") {
     previewBack.textContent = "返回修改";
     previewCopy.hidden = false;
     previewMeta.innerHTML = isArticlePreview
-      ? `<span>主文章</span><span>${productState.article.wordCount.toLocaleString(
+      ? `<span>主文章</span><span>${productState.currentArticle.wordCount.toLocaleString(
           "zh-CN"
         )} 字</span><span>预计阅读 ${
-          productState.article.readingMinutes
+          productState.currentArticle.readingMinutes
         } 分钟</span>`
       : `
           <span>${decision.platform}</span>
@@ -1671,15 +1922,15 @@ if (typeof document !== "undefined") {
     previewContent.innerHTML = `
       ${decisionGrid}
       <h3>${escapeHtml(
-        isArticlePreview ? productState.article.title : channel.version.title
+        isArticlePreview ? productState.currentArticle.title : channel.version.title
       )}</h3>
       <p>${
         isArticlePreview
-          ? escapeHtml(productState.article.summary)
+          ? escapeHtml(productState.currentArticle.summary)
           : escapeHtml(channel.detail)
       }</p>
-      <img class="preview-cover" src="assets/article-cover.png"
-        alt="内容工作流文章封面预览" />
+      <img class="preview-cover" src="${escapeHtml(productState.currentArticle.cover.url)}"
+        alt="${escapeHtml(productState.currentArticle.cover.alt)}" />
       ${missingItems}
       ${riskNotes}
       ${preflightChecks}
@@ -1687,7 +1938,7 @@ if (typeof document !== "undefined") {
     `;
 
     currentPreviewText = isArticlePreview
-      ? `${productState.article.title}\n\n${productState.article.summary}\n\n${articleBody.innerText}`
+      ? `${productState.currentArticle.title}\n\n${productState.currentArticle.summary}\n\n${articleBody.innerText}`
       : `${channel.version.title}\n\n${channel.detail}\n\n发布方式：${channel.method}\n授权状态：${channel.auth}`;
     previewConfirm.hidden = isArticlePreview;
     previewConfirm.disabled =
@@ -1701,9 +1952,7 @@ if (typeof document !== "undefined") {
   }
 
   function openBatchDetail(batchId) {
-    const batch = productState.publishBatches.find(
-      (item) => item.id === batchId
-    );
+    const batch = getPublishBatchDetail(productState, batchId);
     if (!batch) return;
     currentPreviewMode = "batch";
     currentPreviewId = null;
@@ -1716,13 +1965,6 @@ if (typeof document !== "undefined") {
       <span>${batch.channelCount} 个渠道</span>
       <span>${escapeHtml(batch.strategy)}</span>
     `;
-    const channelNames = (batch.channelIds || [])
-      .map(
-        (channelId) =>
-          productState.channels.find((channel) => channel.id === channelId)
-            ?.platform || channelId
-      )
-      .join("、");
     previewContent.innerHTML = `
       <div class="preview-decision-grid">
         <div><span>成功</span><strong>${batch.successCount}</strong></div>
@@ -1731,11 +1973,29 @@ if (typeof document !== "undefined") {
         <div><span>批次状态</span><strong>${batch.status}</strong></div>
       </div>
       <h3>${escapeHtml(batch.articleTitle)}</h3>
-      <section class="preview-review-block">
-        <h4>批次渠道</h4>
-        <p>${escapeHtml(channelNames)}</p>
+      <section class="batch-task-list" aria-label="平台发布任务">
+        ${batch.tasks
+          .map(
+            (task) => `
+              <article class="batch-task">
+                <div>
+                  <strong>${escapeHtml(task.platform)}</strong>
+                  <span>${escapeHtml(task.type)} · ${escapeHtml(task.deliveryMethod)}</span>
+                </div>
+                <p>${escapeHtml(task.versionTitle)}</p>
+                <span class="status-chip">${escapeHtml(task.status)}</span>
+                <p class="${task.lastError ? "is-danger" : ""}">
+                  ${escapeHtml(task.lastError || "无失败原因")}
+                </p>
+                <button type="button" data-copy-batch-task="${task.id}">复制该平台文案</button>
+              </article>
+            `
+          )
+          .join("")}
       </section>
-      <p>本记录保存在当前浏览器中，可复用渠道选择创建新的发布批次。</p>
+      <button class="secondary-button" type="button" data-batch-reuse="${batch.id}">
+        复用为新批次
+      </button>
     `;
     previewDialog.showModal();
   }
@@ -1942,7 +2202,17 @@ if (typeof document !== "undefined") {
 
   coverDescription.addEventListener("input", () => {
     applyArticlePatch({
-      coverDescription: coverDescription.innerText.trim(),
+      cover: {
+        ...productState.currentArticle.cover,
+        description: coverDescription.innerText.trim(),
+      },
+    });
+  });
+  coverAlt.addEventListener("input", () => {
+    const alt = coverAlt.value.trim();
+    coverImage.alt = alt;
+    applyArticlePatch({
+      cover: { ...productState.currentArticle.cover, alt },
     });
   });
 
@@ -1956,7 +2226,7 @@ if (typeof document !== "undefined") {
     const removeButton = event.target.closest("[data-remove-tag]");
     if (!removeButton) return;
     applyArticlePatch({
-      tags: productState.article.tags.filter(
+      tags: productState.currentArticle.tags.filter(
         (tag) => tag !== removeButton.dataset.removeTag
       ),
     });
@@ -1990,8 +2260,140 @@ if (typeof document !== "undefined") {
     }
   });
 
+  previewContent.addEventListener("click", async (event) => {
+    const copyTaskButton = event.target.closest("[data-copy-batch-task]");
+    const reuseButton = event.target.closest("[data-batch-reuse]");
+    if (copyTaskButton) {
+      const task = productState.publishTasks.find(
+        (item) => item.id === copyTaskButton.dataset.copyBatchTask
+      );
+      const detail = task
+        ? getPublishBatchDetail(productState, task.batchId)
+        : null;
+      const taskDetail = detail?.tasks.find((item) => item.id === task.id);
+      if (taskDetail && (await copyText(taskDetail.copyText))) {
+        showToast(`${taskDetail.platform} 文案已复制。`);
+      }
+      return;
+    }
+    if (reuseButton) {
+      productState = reusePublishBatch(productState, reuseButton.dataset.batchReuse);
+      renderQueue();
+      previewDialog.close();
+      switchView("workbench", false);
+      saveNow();
+      showToast("已复用原批次渠道，可检查后再次发布。");
+    }
+  });
+
+  contentLibraryList.addEventListener("click", (event) => {
+    const openButton = event.target.closest("[data-library-open]");
+    const copyButton = event.target.closest("[data-library-copy]");
+    const deleteButton = event.target.closest("[data-library-delete]");
+    const targetId =
+      openButton?.dataset.libraryOpen ||
+      copyButton?.dataset.libraryCopy ||
+      deleteButton?.dataset.libraryDelete;
+    if (!targetId) return;
+    if (deleteButton) {
+      productState = updateArticleContent(productState, {
+        ...cloneProductState(INITIAL_ARTICLE),
+        id: `article-${Date.now()}`,
+        title: "未命名草稿",
+        summary: "",
+        bodyHtml: "<p>开始写作...</p>",
+        tags: [],
+      });
+      hydrateEditor();
+      renderQueue();
+      saveNow();
+      renderContentLibrary();
+      showToast("当前草稿已删除，并创建了空白草稿。");
+      return;
+    }
+    const snapshot = productState.articleSnapshots.find(
+      (item) => item.id === targetId
+    );
+    if (snapshot || copyButton) {
+      const sourceArticle = snapshot || productState.currentArticle;
+      productState = updateArticleContent(productState, {
+        ...cloneProductState(sourceArticle),
+        id: `article-${Date.now()}`,
+        title: copyButton
+          ? `${sourceArticle.title}（副本）`
+          : sourceArticle.title,
+      });
+      hydrateEditor();
+    }
+    switchView("workbench", false);
+    saveNow();
+  });
+
+  function downloadText(filename, text, type = "application/json") {
+    const blob = new Blob([text], { type });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = filename;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
+
+  exportWorkspaceButton.addEventListener("click", () => {
+    const exported = window.OneFlowStorage.exportWorkspaceData(productState);
+    downloadText(exported.filename, exported.json);
+    showToast("工作区 JSON 已导出。");
+  });
+
+  importWorkspaceButton.addEventListener("click", () => {
+    importWorkspaceFile.click();
+  });
+
+  importWorkspaceFile.addEventListener("change", async () => {
+    const file = importWorkspaceFile.files?.[0];
+    if (!file) return;
+    const result = window.OneFlowStorage.importWorkspaceData(await file.text(), {
+      sanitizeState(state) {
+        if (state.currentArticle) {
+          state.currentArticle.bodyHtml = sanitizeHtml(
+            state.currentArticle.bodyHtml
+          );
+        }
+        return state;
+      },
+    });
+    importWorkspaceFile.value = "";
+    if (!result.ok) {
+      showToast("导入失败：文件格式或数据版本不受支持。");
+      return;
+    }
+    pendingImportState = result.state;
+    importSummary.textContent = `将导入“${
+      result.state.currentArticle?.title || "未命名文章"
+    }”，包含 ${result.state.publishBatches?.length || 0} 个发布批次。`;
+    importDialog.showModal();
+  });
+
+  confirmImport.addEventListener("click", (event) => {
+    event.preventDefault();
+    if (!pendingImportState) return;
+    productState = mergePersistedState(defaultState, pendingImportState);
+    storageRecoveryRequired = false;
+    pendingImportState = null;
+    recoveryNotice.hidden = true;
+    hydrateEditor();
+    renderQueue();
+    renderPublishHistory();
+    renderContentLibrary();
+    switchView("workbench", false);
+    saveNow();
+    importDialog.close();
+    showToast("工作区数据已导入并恢复。");
+  });
+
   resetDemo.addEventListener("click", () => {
     stateStore?.reset();
+    storageRecoveryRequired = false;
     productState = createProductState();
     channels = getChannelViews(productState);
     activeFilter = "all";
@@ -2006,6 +2408,18 @@ if (typeof document !== "undefined") {
     switchView("workbench", false);
     saveNow();
     showToast("演示数据已重置。");
+  });
+
+  document.querySelector("#export-corrupt-backup").addEventListener("click", () => {
+    downloadText(
+      `oneflow-corrupt-backup-${Date.now()}.json.txt`,
+      restoredSnapshot.raw || "",
+      "text/plain"
+    );
+  });
+  document.querySelector("#recovery-reset").addEventListener("click", () => {
+    resetDemo.click();
+    recoveryNotice.hidden = true;
   });
 
   document.addEventListener("click", (event) => {
@@ -2062,6 +2476,11 @@ if (typeof document !== "undefined") {
   hydrateEditor();
   renderQueue();
   renderPublishHistory();
+  renderContentLibrary();
+  recoveryNotice.hidden = !storageRecoveryRequired;
+  if (restoredSnapshot.ok && restoredSnapshot.migrated) {
+    saveNow();
+  }
   switchView(
     productState.workspaceSettings.activeView || "workbench",
     false

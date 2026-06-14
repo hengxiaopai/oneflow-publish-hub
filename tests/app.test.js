@@ -16,9 +16,11 @@ const {
   estimatePublishMinutes,
   formatPublishSummary,
   getChannelViews,
+  getContentLibraryRows,
   groupChannels,
   getReadyChannels,
   getPublishHistoryRows,
+  getPublishBatchDetail,
   getVisibleDeliverables,
   mergePersistedState,
   readaptChannelVersion,
@@ -42,7 +44,7 @@ test("product state normalizes the article, channels, versions, tasks, and capab
     state.channelVersions.map((version) => version.id)
   );
 
-  assert.equal(state.article.id, "article-agent-workflow");
+  assert.equal(state.currentArticle.id, "article-agent-workflow");
   assert.equal(state.channels.length, 14);
   assert.equal(state.platformCapabilities.length, 14);
   assert.equal(state.channelVersions.length, 14);
@@ -50,7 +52,7 @@ test("product state normalizes the article, channels, versions, tasks, and capab
   assert.ok(
     state.channelVersions.every(
       (version) =>
-        version.articleId === state.article.id &&
+        version.articleId === state.currentArticle.id &&
         channelIds.has(version.channelId)
     )
   );
@@ -297,8 +299,8 @@ test("editing the source article marks every channel version for adaptation", ()
     "2026-06-13T16:00:00.000Z"
   );
 
-  assert.equal(state.article.title, "更新后的文章标题");
-  assert.equal(state.article.updatedAt, "2026-06-13T16:00:00.000Z");
+  assert.equal(state.currentArticle.title, "更新后的文章标题");
+  assert.equal(state.currentArticle.updatedAt, "2026-06-13T16:00:00.000Z");
   assert.ok(
     state.channelVersions.every(
       (version) => version.versionStatus === "needs_adaptation"
@@ -354,7 +356,7 @@ test("publish history derives counts and can be reused as a new selection", () =
   const reused = reusePublishBatch(state, result.batch.id);
 
   assert.equal(rows.length, 1);
-  assert.equal(rows[0].articleTitle, state.article.title);
+  assert.equal(rows[0].articleTitle, state.currentArticle.title);
   assert.equal(rows[0].channelCount, 2);
   assert.equal(rows[0].successCount, 1);
   assert.equal(rows[0].pendingCount, 1);
@@ -369,12 +371,65 @@ test("publish history derives counts and can be reused as a new selection", () =
 
 test("persisted state merges workspace settings with current schema defaults", () => {
   const restored = mergePersistedState(createProductState(), {
-    article: { title: "本地保存的标题" },
+    currentArticle: { title: "本地保存的标题" },
     workspaceSettings: { queueDensity: "compact" },
   });
 
-  assert.equal(restored.article.title, "本地保存的标题");
-  assert.equal(restored.article.id, "article-agent-workflow");
+  assert.equal(restored.currentArticle.title, "本地保存的标题");
+  assert.equal(restored.currentArticle.id, "article-agent-workflow");
   assert.equal(restored.workspaceSettings.queueDensity, "compact");
   assert.equal(restored.channels.length, 14);
+});
+
+test("publish batches preserve immutable article and channel version snapshots", () => {
+  const confirmed = confirmChannelVersion(createProductState(), "juejin");
+  const published = createPublishBatch(confirmed, {
+    now: "2026-06-14T08:00:00.000Z",
+  });
+  const before = getPublishBatchDetail(published.state, published.batch.id);
+  const edited = updateArticleContent(
+    published.state,
+    {
+      title: "发布后继续编辑的新标题",
+      bodyHtml: "<p>新的正文</p>",
+    },
+    "2026-06-14T09:00:00.000Z"
+  );
+  const after = getPublishBatchDetail(edited, published.batch.id);
+  const reused = reusePublishBatch(edited, published.batch.id);
+  const afterReuse = getPublishBatchDetail(reused, published.batch.id);
+
+  assert.equal(before.articleTitle, confirmed.currentArticle.title);
+  assert.equal(after.articleTitle, confirmed.currentArticle.title);
+  assert.notEqual(after.articleTitle, edited.currentArticle.title);
+  assert.deepEqual(after.tasks, before.tasks);
+  assert.deepEqual(afterReuse.tasks, before.tasks);
+  assert.equal(edited.articleSnapshots.length, 1);
+  assert.equal(edited.channelVersionSnapshots.length, 2);
+});
+
+test("article cover model includes platform crop foundations", () => {
+  const cover = createProductState().currentArticle.cover;
+
+  assert.equal(cover.sourceType, "generated");
+  assert.deepEqual(Object.keys(cover).sort(), [
+    "alt",
+    "aspectRatio",
+    "description",
+    "platformCrops",
+    "sourceType",
+    "url",
+  ]);
+  assert.ok(cover.platformCrops.length >= 3);
+});
+
+test("content library derives draft and published entries from local state", () => {
+  const published = createPublishBatch(createProductState(), {
+    now: "2026-06-14T08:00:00.000Z",
+  }).state;
+  const rows = getContentLibraryRows(published);
+
+  assert.ok(rows.some((row) => row.status === "草稿"));
+  assert.ok(rows.some((row) => row.status === "已发布"));
+  assert.ok(rows.every((row) => Number.isInteger(row.batchCount)));
 });

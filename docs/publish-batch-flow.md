@@ -1,6 +1,6 @@
 # Publish Batch Flow
 
-更新日期：2026-06-13
+更新日期：2026-06-14
 
 ## 状态链路
 
@@ -11,7 +11,9 @@
   -> needs_review
   -> 人工确认
   -> ready
-  -> 选中渠道进入 PublishBatch
+  -> 复制 ArticleSnapshot
+  -> 为每个渠道复制 ChannelVersionSnapshot
+  -> 创建批次级 PublishTask 与 PublishBatch
   -> 自动渠道 published / 半自动渠道 queued
   -> 发布记录与后续数据回流
 ```
@@ -33,7 +35,20 @@
 - 自建 Blog 作为已验证自动发布示例，创建批次后记为成功。
 - 生成草稿、复制发布和人工确认渠道在批次中记为待平台侧处理。
 - Phase 2 不向任何第三方平台发送请求。
-- 批次保存文章标题、渠道、策略和结果计数快照。
+- 批次保存 ArticleSnapshot、ChannelVersionSnapshot、渠道、策略和结果计数。
+
+## 不可变快照
+
+`createPublishBatch()` 在同一次内存事务中完成：
+
+1. 复制 `currentArticle` 为 `ArticleSnapshot`，正文再次经过 sanitizer。
+2. 为每个就绪渠道复制对应 `ChannelVersionSnapshot`。
+3. 创建新的批次级 `PublishTask`，引用平台版本快照。
+4. `PublishBatch` 引用文章快照和批次任务 ID。
+5. 当前工作区任务可以继续变化，但历史详情只读取快照与批次任务。
+
+因此批次创建后继续编辑文章、重新适配平台版本或修改队列选择，都不会改变
+历史发布记录。复用批次只恢复渠道选择，不修改旧快照。
 
 ## 发布记录
 
@@ -54,7 +69,7 @@
 
 - 第三方平台授权、验证码、审核和风控可能阻断自动化。
 - 自动发布必须具备幂等键，避免网络重试产生重复内容。
-- PublishBatch 应由服务端事务创建，PublishTask 应独立重试。
+- PublishBatch、ArticleSnapshot、ChannelVersionSnapshot 与 PublishTask 应由
+  服务端事务创建，PublishTask 应独立重试。
 - 平台回调和轮询结果需要统一映射为内部 PublishStatus。
 - 复制发布渠道无法自动证明最终提交成功，需要人工回执或浏览器自动化实验。
-

@@ -1,6 +1,6 @@
 # Product Data Model
 
-更新日期：2026-06-13
+更新日期：2026-06-14
 
 ## 建模原则
 
@@ -12,7 +12,8 @@
 
 当前 `app.js` 通过 `createProductState()` 创建规范化状态，通过
 `getChannelViews()` 组合为队列卡片需要的视图。`storage.js` 将完整工作区保存为
-schema version 2 的本地快照，`mergePersistedState()` 负责用当前默认结构补齐旧数据。
+schema version 3 的本地快照，`mergePersistedState()` 负责用当前默认结构补齐迁移数据。
+`currentArticle` 与历史快照分开保存，发布记录不读取持续变化的编辑态。
 
 ## Article
 
@@ -30,8 +31,7 @@ schema version 2 的本地快照，`mergePersistedState()` 负责用当前默认
 | `wordCount` | number | 主文章字数 |
 | `readingMinutes` | number | 预计阅读时长 |
 | `seoSummaryLength` | number | SEO 摘要当前长度 |
-| `coverAsset` | string | 主封面资源路径 |
-| `coverDescription` | string | 可编辑封面说明 |
+| `cover` | Cover | 封面来源、URL、替代文本、比例与平台裁剪基础 |
 | `tags` | string[] | 主文章标签 |
 | `createdAt` | ISO string | 创建时间 |
 | `updatedAt` | ISO string | 最近编辑时间 |
@@ -44,11 +44,31 @@ schema version 2 的本地快照，`mergePersistedState()` 负责用当前默认
   "status": "draft",
   "contentFormat": "markdown",
   "wordCount": 3286,
-  "coverAsset": "assets/article-cover.png"
+  "cover": {
+    "sourceType": "generated",
+    "url": "assets/article-cover.png",
+    "alt": "一个内容节点分发为多个渠道版本的抽象工作流",
+    "aspectRatio": "16:9",
+    "platformCrops": []
+  }
 }
 ```
 
-当前对应：`INITIAL_ARTICLE` 和 `productState.article`。
+当前对应：`INITIAL_ARTICLE` 和 `productState.currentArticle`。
+
+### Cover
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `sourceType` | string | `generated`、`uploaded` 或 `remote` |
+| `url` | string | 当前封面资源地址；本地 MVP 只保存地址 |
+| `alt` | string | 无障碍替代文本 |
+| `aspectRatio` | string | 主封面比例 |
+| `description` | string | 可编辑封面说明 |
+| `platformCrops` | PlatformCrop[] | 各平台裁剪意图 |
+
+`PlatformCrop` 包含 `platformId`、`ratio`、`cropHint` 和 `status`。Phase 2.5
+只建立模型与说明/alt 编辑，不存储图片二进制，也不实现复杂裁剪器。
 
 ## Channel
 
@@ -162,7 +182,9 @@ schema version 2 的本地快照，`mergePersistedState()` 负责用当前默认
 | `id` | string | 发布任务标识 |
 | `channelId` | string | 关联 Channel |
 | `channelVersionId` | string | 关联 ChannelVersion |
-| `batchId` | string/null | 所属 PublishBatch |
+| `scope` | string | `workspace` 为当前队列任务，`batch` 为历史不可变执行任务 |
+| `batchId` | string/null | 批次任务所属 PublishBatch |
+| `channelVersionSnapshotId` | string/null | 批次创建时的平台版本快照 |
 | `status` | PublishStatus | 任务状态 |
 | `action` | string | 当前 UI 操作 |
 | `retryCount` | number | 已重试次数 |
@@ -188,7 +210,8 @@ schema version 2 的本地快照，`mergePersistedState()` 负责用当前默认
 
 ## PublishBatch
 
-一次批量发布操作，只包含创建批次时已选择且就绪的任务。
+一次批量发布操作，只包含创建批次时已选择且就绪的任务。批次本身只引用
+不可变快照，不依赖后续继续变化的 `currentArticle` 或 `channelVersions`。
 
 | 字段 | 类型 | 含义 |
 |---|---|---|
@@ -196,7 +219,7 @@ schema version 2 的本地快照，`mergePersistedState()` 负责用当前默认
 | `articleId` | string | 关联 Article |
 | `taskIds` | string[] | 本批次的 PublishTask |
 | `channelIds` | string[] | 批次渠道快照，供详情和复用使用 |
-| `articleTitle` | string | 创建批次时的文章标题快照 |
+| `articleSnapshotId` | string | 关联 ArticleSnapshot |
 | `channelCount` | number | 本批次渠道数量 |
 | `successCount` | number | 本地模拟成功数量 |
 | `pendingCount` | number | 等待平台侧人工提交数量 |
@@ -212,7 +235,8 @@ schema version 2 的本地快照，`mergePersistedState()` 负责用当前默认
 {
   "id": "batch-001",
   "articleId": "article-agent-workflow",
-  "taskIds": ["blog-task-001"],
+  "articleSnapshotId": "batch-001-article-snapshot",
+  "taskIds": ["batch-001-blog-task"],
   "status": "queued",
   "schedule": "now",
   "strategy": "automatic-first",
@@ -221,6 +245,39 @@ schema version 2 的本地快照，`mergePersistedState()` 负责用当前默认
 ```
 
 当前对应：`productState.publishBatches` 和 `createPublishBatch()`。
+
+## ArticleSnapshot
+
+创建发布批次时复制的文章不可变快照。字段以 Article 为基础，额外包含
+`sourceArticleId` 和 `createdAt`。当前对应 `productState.articleSnapshots`。
+发布记录标题、摘要、正文、标签与封面均从该快照读取。
+
+## ChannelVersionSnapshot
+
+每个批次 PublishTask 创建时复制的平台版本快照。字段以 ChannelVersion 为
+基础，额外包含 `sourceChannelVersionId` 和 `createdAt`。当前对应
+`productState.channelVersionSnapshots`，保存平台版本标题、发布方式、缺失项与
+风险说明。
+
+## Workspace 根状态
+
+```json
+{
+  "currentArticle": {},
+  "channels": [],
+  "channelVersions": [],
+  "platformCapabilities": [],
+  "publishTasks": [],
+  "publishBatches": [],
+  "articleSnapshots": [],
+  "channelVersionSnapshots": [],
+  "validationIssues": [],
+  "workspaceSettings": {}
+}
+```
+
+`publishTasks` 同时包含当前工作区任务和批次任务，通过 `scope` 与 `batchId`
+区分。后端化时建议拆成 draft task 与 execution task 两张表。
 
 ## PublishStatus
 

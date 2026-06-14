@@ -2228,3 +2228,225 @@ button:disabled {
     transform: none;
   }
 }
+
+/* Phase 2.5 keeps data controls compact and subordinate to the editor. */
+.workspace-data {
+  display: grid;
+  gap: 8px;
+  margin-top: auto;
+  padding-top: 16px;
+  border-top: 1px solid var(--line-soft);
+}
+
+.workspace-data > button,
+.data-recovery-notice button {
+  min-height: 34px;
+  border: 1px solid var(--line-soft);
+  border-radius: 10px;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+
+.workspace-data > button:hover,
+.data-recovery-notice button:hover {
+  border-color: var(--line-strong);
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.data-recovery-notice {
+  padding: 12px;
+  border: 1px solid rgba(237, 133, 110, 0.52);
+  border-radius: 14px;
+  background: rgba(109, 38, 28, 0.3);
+  color: #ffe8e1;
+}
+
+.data-recovery-notice p {
+  margin: 5px 0 10px;
+  color: #e9c5bc;
+  font-size: 12px;
+  line-height: 1.5;
+}
+
+.data-recovery-notice div {
+  display: flex;
+  gap: 7px;
+}
+
+.cover-alt-field {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px 12px;
+  border-top: 1px solid #e8e2d9;
+  color: #6c665f;
+  font-size: 12px;
+}
+
+.cover-alt-field input {
+  min-width: 0;
+  height: 34px;
+  padding: 0 10px;
+  border: 1px solid #ddd5ca;
+  border-radius: 8px;
+  background: #fffdfa;
+  color: #332f2a;
+}
+
+.content-library-view {
+  min-height: calc(100vh - 96px);
+  padding: 34px clamp(20px, 5vw, 72px) 72px;
+}
+
+.library-list {
+  display: grid;
+  gap: 10px;
+  margin-top: 24px;
+}
+
+.library-row {
+  display: grid;
+  grid-template-columns: minmax(260px, 1.5fr) 110px 140px auto;
+  align-items: center;
+  gap: 18px;
+  padding: 16px 18px;
+  border: 1px solid #e5ded4;
+  border-radius: 16px;
+  background: #fffdfa;
+  color: #544e47;
+}
+
+.library-row > div:first-child {
+  display: grid;
+  grid-template-columns: auto 1fr;
+  gap: 4px 10px;
+  align-items: center;
+}
+
+.library-row strong {
+  color: #28231f;
+}
+
+.library-row small {
+  grid-column: 2;
+  color: #837b72;
+}
+
+.library-row .history-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 6px;
+}
+
+.library-row .history-actions button {
+  min-height: 34px;
+  padding: 0 10px;
+  border: 1px solid #d8d0c5;
+  border-radius: 9px;
+  background: #fff;
+  color: #4c453e;
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.library-row .history-actions button:hover {
+  border-color: #9d8e7d;
+  background: #f5efe7;
+}
+
+.library-row .history-actions button:disabled {
+  border-color: transparent;
+  background: transparent;
+  color: #aaa198;
+  cursor: not-allowed;
+}
+
+.status-chip {
+  display: inline-flex;
+  width: fit-content;
+  padding: 4px 8px;
+  border-radius: 999px;
+  background: #eee9e1;
+  color: #665f57;
+  font-size: 11px;
+}
+
+.batch-task-list {
+  display: grid;
+  gap: 10px;
+  margin: 16px 0;
+}
+
+.batch-task {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid #e3ddd4;
+  border-radius: 12px;
+  background: #faf7f2;
+  color: #554f48;
+}
+
+.batch-task div {
+  display: grid;
+  gap: 3px;
+}
+
+.batch-task span,
+.batch-task p {
+  margin: 0;
+  font-size: 12px;
+}
+
+.batch-task > p {
+  grid-column: 1 / -1;
+}
+
+.batch-task strong {
+  color: #2e2924;
+}
+
+.batch-task button {
+  grid-column: 2;
+  grid-row: 1;
+  min-height: 34px;
+  padding: 0 12px;
+  border: 1px solid #d8d0c5;
+  border-radius: 9px;
+  background: #fff;
+  color: #3c3732;
+  cursor: pointer;
+}
+
+.compact-dialog .preview-card {
+  width: min(560px, calc(100vw - 32px));
+}
+
+@media (max-width: 920px) {
+  .library-row {
+    grid-template-columns: 1fr 90px;
+  }
+
+  .library-row .history-actions {
+    grid-column: 1 / -1;
+  }
+
+  .batch-task {
+    grid-template-columns: 1fr auto;
+  }
+
+  .batch-task p,
+  .batch-task button {
+    grid-column: 1 / -1;
+  }
+
+  .cover-alt-field {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+}

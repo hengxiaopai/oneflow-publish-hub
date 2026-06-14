@@ -38,18 +38,24 @@ python -m http.server 4173
 - 设置立即/定时发布、发布策略和发布后动作。
 - 平板宽度下，工作区与发布队列会切换为抽屉。
 - 发布记录页可查看本地批次详情，并复用渠道创建新批次。
+- 发布记录使用不可变文章与平台版本快照，后续编辑不会改写历史。
+- 内容库可查看当前草稿和已发布快照，并打开或复制为新文章。
+- 工作区支持 JSON 导入、导出和显式重置。
 - 队列支持舒适与紧凑两种密度。
 - 侧栏“重置”可恢复演示数据。
 
 ## 本地持久化
 
-Phase 2 使用版本化 `localStorage` 快照，键为
-`oneflow.workspace.v2`。不保存平台令牌、Cookie、图片或视频二进制数据。
+Phase 2.5 使用版本化 `localStorage` 快照，键为
+`oneflow.workspace.v3`，兼容迁移 v1/v2。正文经过最小 HTML 白名单过滤；
+不保存平台令牌、Cookie、图片或视频二进制数据。
 
 详见：
 
 - `docs/local-persistence.md`
 - `docs/publish-batch-flow.md`
+- `docs/storage-migration.md`
+- `docs/html-sanitization.md`
 
 ## 可访问性
 
@@ -92,6 +98,6 @@ Phase 2 使用版本化 `localStorage` 快照，键为
 ## 验证
 
 ```powershell
-node --test tests/app.test.js tests/storage.test.js
+node --test tests/*.test.js
 python "$env:CODEX_HOME\skills\.system\skill-creator\scripts\quick_validate.py" skills\liquid-glass-product-ui
 ```

@@ -34,7 +34,7 @@
         >
           工作台
         </button>
-        <button class="nav-item" type="button">内容库</button>
+        <button class="nav-item" type="button" data-app-view="library">内容库</button>
         <button class="nav-item" type="button" data-app-view="history">
           发布记录
         </button>
@@ -121,15 +121,14 @@
             <span class="eyebrow">当前工作区</span>
             <h2>技术内容引擎</h2>
           </div>
-          <div class="sidebar-header-actions">
-            <button
-              class="text-button"
-              id="reset-demo"
-              type="button"
-              aria-label="重置演示数据"
-            >
-              重置
-            </button>
+        </div>
+
+        <div class="data-recovery-notice" id="data-recovery-notice" hidden>
+          <strong>本地数据异常</strong>
+          <p>可导出原始备份或重置演示数据，系统不会静默覆盖。</p>
+          <div>
+            <button type="button" id="export-corrupt-backup">导出备份</button>
+            <button type="button" id="recovery-reset">重置数据</button>
           </div>
         </div>
 
@@ -180,6 +179,21 @@
             <span>需要处理</span>
             <strong>2</strong>
           </div>
+        </section>
+
+        <section class="workspace-data" aria-labelledby="workspace-data-title">
+          <div class="section-title-row">
+            <h3 id="workspace-data-title">工作区数据</h3>
+          </div>
+          <button type="button" id="export-workspace">导出工作区</button>
+          <button type="button" id="import-workspace">导入工作区</button>
+          <button type="button" id="reset-demo">重置演示数据</button>
+          <input
+            id="import-workspace-file"
+            type="file"
+            accept="application/json,.json"
+            hidden
+          />
         </section>
       </aside>
 
@@ -267,6 +281,7 @@
 
           <figure class="cover-figure">
             <img
+              id="cover-image"
               src="assets/article-cover.png"
               alt="一个内容节点分发为多个渠道版本的抽象工作流"
             />
@@ -280,6 +295,15 @@
               </span>
               <button type="button">更换封面</button>
             </figcaption>
+            <label class="cover-alt-field" for="cover-alt">
+              <span>封面替代文本</span>
+              <input
+                id="cover-alt"
+                type="text"
+                maxlength="160"
+                value="一个内容节点分发为多个渠道版本的抽象工作流"
+              />
+            </label>
           </figure>
 
           <section
@@ -397,6 +421,22 @@
       </div>
     </section>
 
+    <section class="content-library-view" id="content-library-view" hidden>
+      <div class="history-paper">
+        <header class="history-header">
+          <div>
+            <span class="eyebrow">Content Library</span>
+            <h1>内容库</h1>
+            <p>查看当前草稿与发布时保存的不可变文章快照。</p>
+          </div>
+          <button class="secondary-button" type="button" data-app-view="workbench">
+            返回工作台
+          </button>
+        </header>
+        <div class="library-list" id="content-library-list"></div>
+      </div>
+    </section>
+
     <footer
       class="glass publish-dock"
       id="publish-dock"
@@ -480,10 +520,36 @@
       </form>
     </dialog>
 
+    <dialog class="preview-dialog compact-dialog" id="import-dialog">
+      <form method="dialog" class="preview-card">
+        <header class="preview-header">
+          <div>
+            <span class="eyebrow">Workspace Import</span>
+            <h2>确认导入工作区</h2>
+          </div>
+          <button class="small-button" value="cancel">关闭</button>
+        </header>
+        <div class="preview-content">
+          <p id="import-summary">导入将替换当前浏览器中的工作区数据。</p>
+          <section class="preview-review-block is-risk">
+            <h4>覆盖提醒</h4>
+            <p>当前数据会在确认后被替换。建议先导出工作区作为备份。</p>
+          </section>
+        </div>
+        <footer class="preview-actions">
+          <button class="secondary-button" value="cancel">取消</button>
+          <button class="primary-button" id="confirm-import" value="default">
+            确认导入
+          </button>
+        </footer>
+      </form>
+    </dialog>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="panel-scrim" id="panel-scrim" hidden></div>
 
-    <script src="storage.js?v=2"></script>
-    <script src="app.js?v=2"></script>
+    <script src="sanitizer.js?v=3"></script>
+    <script src="storage.js?v=3"></script>
+    <script src="app.js?v=3"></script>
   </body>
 </html>
