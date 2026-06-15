@@ -1,33 +1,96 @@
-# Halo Integration Boundary
+# Halo Server-side Integration
 
-更新日期：2026-06-14
+更新日期：2026-06-15
 
-## 当前结论
+## Phase 6 状态
 
-提交 `c89aa06` 记录了 Phase 3 的 Halo 浏览器直连设计，用于验证 Halo 2.x
-Console API、PostRequest 映射和本地发布体验。
+OneFlow 已实现第一条真实平台发布链路：自建 Blog / Halo。正式流程是：
 
-产品定位升级为公开 SaaS 后，该方案已被 Phase 3S 的服务端发布器设计取代。
+```text
+前端创建 PublishBatch
+  -> 后端生成 PublishTask 与不可变快照
+  -> Publisher Router 选择 Halo Worker
+  -> Worker 临时解密 PAT
+  -> 创建 Halo 草稿
+  -> 可选发布草稿
+  -> 回写远程 ID、URL、状态和耗时
+```
 
-## 正式 SaaS 方案
+浏览器不直接调用 Halo，也不会读取已保存 PAT。
 
-- 用户在渠道设置中发起 Halo 连接。
-- PAT 通过受保护请求发送到后端一次。
-- 后端加密保存 PAT，之后只向前端返回连接状态。
-- 前端创建 PublishBatch。
-- 后端创建 PublishTask 并写入队列。
-- HaloPublisher Worker 解密 PAT 并调用 Halo。
-- 任务结果和远程 URL 回写数据库。
+## Halo 2.25 接口
 
-## 本地开发方案
+当前实现基于 Halo 官方资料确认的 Console API：
 
-- MockPublisher 是默认发布器。
-- 浏览器直连 Halo 可以保留为显式开启的本地实验。
-- 本地实验不能成为 SaaS 主流程，不能把 Token 写入 Git、导出包、日志或截图。
-- CORS 失败只说明浏览器不能直连，不影响正式服务端发布方案。
+- PAT：`Authorization: Bearer <PAT>`
+- 连接测试：`GET /apis/api.console.halo.run/v1alpha1/posts?page=0&size=1`
+- 创建草稿：`POST /apis/api.console.halo.run/v1alpha1/posts`
+- 发布草稿：`PUT /apis/api.console.halo.run/v1alpha1/posts/{name}/publish`
+- 草稿载荷：`PostRequest { post, content }`
 
-## 官方资料
+`baseUrl` 与 `consoleApiEndpoint` 均可配置。默认 endpoint 为
+`/apis/api.console.halo.run/v1alpha1`。
 
-- [Halo REST API introduction](https://docs.halo.run/developer-guide/restful-api/introduction)
-- [Halo generated Python client](https://github.com/halo-dev/python_client)
-- [PostV1alpha1ConsoleApi](https://github.com/halo-dev/python_client/blob/main/docs/PostV1alpha1ConsoleApi.md)
+官方资料：
+
+- [Halo 2.25 RESTful API introduction](https://docs.halo.run/developer-guide/restful-api/introduction)
+- [Halo RESTful API index](https://api.halo.run/)
+- [Halo generated PostRequest model](https://github.com/halo-dev/python_client/blob/main/docs/PostRequest.md)
+- [Halo generated PostSpec model](https://github.com/halo-dev/python_client/blob/main/docs/PostSpec.md)
+- [Halo Console Post API](https://github.com/halo-dev/python_client/blob/main/docs/PostV1alpha1ConsoleApi.md)
+
+## PostRequest 映射
+
+OneFlow 将 ArticleSnapshot 与 ChannelVersionSnapshot 集中映射为：
+
+```json
+{
+  "post": {
+    "apiVersion": "content.halo.run/v1alpha1",
+    "kind": "Post",
+    "metadata": {
+      "name": "",
+      "generateName": "post-"
+    },
+    "spec": {
+      "title": "平台标题",
+      "slug": "editable-slug",
+      "excerpt": { "autoGenerate": false, "raw": "平台摘要" },
+      "cover": "https://...",
+      "tags": ["tag-metadata-name"],
+      "categories": ["category-metadata-name"],
+      "visible": "PUBLIC",
+      "publish": false,
+      "allowComment": true
+    }
+  },
+  "content": {
+    "raw": "Markdown source",
+    "content": "<p>sanitized HTML</p>",
+    "rawType": "MARKDOWN"
+  }
+}
+```
+
+分类、标签和作者需要填写 Halo 对应资源的 `metadata.name`，不是仅供展示的名称。
+不同 Halo 小版本或插件可能扩展字段，映射统一维护在
+`server/src/services/publishers/haloPublisherService.js`。
+
+## 错误映射
+
+| Halo / 网络状态 | OneFlow 错误码 |
+|---|---|
+| 401 / 403 | `HALO_AUTH_FAILED` |
+| 404 | `HALO_ENDPOINT_NOT_FOUND` |
+| 409 | `HALO_SLUG_CONFLICT` |
+| 400 / 422 | `HALO_PAYLOAD_INVALID` |
+| Timeout | `HALO_TIMEOUT` |
+| Connection refused | `HALO_UNREACHABLE` |
+| Network failure | `HALO_NETWORK_ERROR` |
+
+错误响应与任务结果不保存 Authorization Header、PAT 或原始响应头。
+
+## 过渡方案
+
+提交 `c89aa06` 的浏览器直连方案是 Phase 3 本地验证产物，已被本服务端链路取代。
+相关代码可保留用于历史参考，但不是 SaaS 正式方案，也不依赖 CORS。

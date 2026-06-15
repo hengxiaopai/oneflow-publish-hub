@@ -9,21 +9,35 @@ function parseJson(value, fallback) {
   }
 }
 
-function versionSnapshot(article, channel) {
+function versionSnapshot(article, channel, existingVersion = null) {
+  const metadata = parseJson(existingVersion?.metadata, {});
   return {
-    id: null,
+    id: existingVersion?.id || null,
     articleId: article.id,
     channelId: channel.id,
     platformId: channel.platformId,
     platformName: channel.displayName,
     channelType: channel.channelType,
-    title: article.title,
-    summary: article.summary,
-    contentHtml: article.contentHtml,
-    contentMarkdown: article.contentMarkdown,
-    tags: parseJson(article.tags, []),
-    cover: parseJson(article.cover, {}),
-    versionStatus: "ready",
+    title: existingVersion?.title || article.title,
+    platformTitle: existingVersion?.title || article.title,
+    summary: existingVersion?.summary || article.summary,
+    platformSummary: existingVersion?.summary || article.summary,
+    contentHtml: existingVersion?.contentHtml || article.contentHtml,
+    platformContentHtml:
+      existingVersion?.contentHtml || article.contentHtml,
+    contentMarkdown:
+      existingVersion?.contentMarkdown || article.contentMarkdown,
+    platformContentMarkdown:
+      existingVersion?.contentMarkdown || article.contentMarkdown,
+    tags: existingVersion
+      ? parseJson(existingVersion.tags, [])
+      : parseJson(article.tags, []),
+    cover: metadata.cover || parseJson(article.cover, {}),
+    slug: article.slug,
+    seoTitle: metadata.seoTitle || "",
+    seoDescription: metadata.seoDescription || "",
+    canonicalUrl: metadata.canonicalUrl || "",
+    versionStatus: existingVersion?.status || "ready",
     publishMethod:
       parseJson(channel.configuration, {}).publishMode || "create_draft",
     sourceArticleUpdatedAt: article.updatedAt,
@@ -42,6 +56,16 @@ export function taskView(task) {
     channelVersionSnapshot: parseJson(task.channelVersionSnapshot, {}),
     result: parseJson(task.result, null),
     remoteUrl: task.remoteUrl,
+    remotePostId: task.remotePostId,
+    remotePostName: task.remotePostName,
+    remoteEditUrl: task.remoteEditUrl,
+    remotePreviewUrl: task.remotePreviewUrl,
+    remotePublicUrl: task.remotePublicUrl,
+    remoteStatus: task.remoteStatus,
+    draftCreatedAt: task.draftCreatedAt,
+    publishedAt: task.publishedAt,
+    lastSyncAt: task.lastSyncAt,
+    rawResponseSummary: parseJson(task.rawResponseSummary, null),
     errorMessage: task.errorMessage,
     retryCount: task.retryCount,
     startedAt: task.startedAt,
@@ -68,7 +92,7 @@ export function batchView(batch) {
   };
 }
 
-export function createPublishService(prisma, mockPublisher) {
+export function createPublishService(prisma, publisherRouter) {
   async function findBatch(workspaceId, batchId) {
     return prisma.publishBatch.findFirst({
       where: { id: batchId, workspaceId },
@@ -110,7 +134,18 @@ export function createPublishService(prisma, mockPublisher) {
     });
 
     for (const channel of channels) {
-      const snapshotValue = versionSnapshot(article, channel);
+      const existingVersion = await prisma.channelVersion.findUnique({
+        where: {
+          articleId_channelConfigId: {
+            articleId: article.id,
+            channelConfigId: channel.id,
+          },
+        },
+      });
+      const snapshotValue = versionSnapshot(article, channel, existingVersion);
+      const preserveStale = ["stale", "needs_adaptation"].includes(
+        existingVersion?.status,
+      );
       const version = await prisma.channelVersion.upsert({
         where: {
           articleId_channelConfigId: {
@@ -118,7 +153,7 @@ export function createPublishService(prisma, mockPublisher) {
             channelConfigId: channel.id,
           },
         },
-        update: {
+        update: preserveStale ? {} : {
           title: snapshotValue.title,
           summary: snapshotValue.summary,
           contentHtml: snapshotValue.contentHtml,
@@ -169,7 +204,7 @@ export function createPublishService(prisma, mockPublisher) {
       },
     });
 
-    await mockPublisher.runBatch(batch.id);
+    await publisherRouter.runBatch(batch.id);
     return { batch: await findBatch(workspaceId, batch.id) };
   }
 
@@ -187,7 +222,7 @@ export function createPublishService(prisma, mockPublisher) {
         errorMessage: null,
       },
     });
-    await mockPublisher.runTask(task.id);
+    await publisherRouter.runTask(task.id);
     return {
       task: await prisma.publishTask.findUnique({ where: { id: task.id } }),
     };

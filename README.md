@@ -3,10 +3,9 @@
 OneFlow 是面向 AI 内容创作者的“一文多发发布中枢”。它将文章编辑、AI
 分析、多平台适配、人工确认、授权检查、批量发布和数据回流组织在同一工作台中。
 
-当前阶段为 **Phase 5，真实认证与 Workspace 多租户基础**。Vanilla JS 工作台保持不变，
-后端新增 Argon2id 密码注册/登录、httpOnly Cookie、数据库 Session、Workspace RBAC、
-服务端套餐校验，以及 SQLite 开发与 PostgreSQL 生产 schema。项目不包含真实平台
-API Token、第三方账号凭证或支付密钥。
+当前阶段为 **Phase 6，服务端 Halo Publisher**。Vanilla JS 工作台保持不变，后端已
+打通 Halo 2.x PAT、Console API 草稿创建、可选发布、远程结果回写与失败重试。PAT
+只在服务端加密保存，仓库不包含真实平台 Token、账号凭证或支付密钥。
 
 ![OneFlow 桌面工作台](docs/screenshots/phase-2-5-desktop-1440.png)
 
@@ -35,6 +34,9 @@ API Token、第三方账号凭证或支付密钥。
 - Owner/Admin/Editor/Viewer 服务端 RBAC。
 - Workspace.plan 驱动的服务端 Entitlement。
 - SQLite 本地 schema 与 PostgreSQL 兼容 schema 双校验。
+- 自建 Blog / Halo 服务端真实草稿发布链路。
+- Halo PAT 加密保存、连接测试、凭据清除和 owner/admin RBAC。
+- Publisher Router 在 Halo Worker 与 Mock Worker 之间选择执行器。
 
 ## 产品工作流
 
@@ -105,6 +107,13 @@ npm run dev:server
 - **SaaS Dev Mode**：调用本地 API、SQLite 与后端 Mock Worker。
 - **SaaS Auth Mode**：真实注册/登录，Session 仅通过 httpOnly Cookie 管理。
 
+进入 `#/channels` 可配置自建 Blog / Halo。默认发布模式是“创建草稿”；只有用户显式
+选择“创建并发布”时，Worker 才会在创建草稿后调用 publish endpoint。
+
+没有可用 Halo 实例时，可在另一个终端运行 `npm run dev:fake-halo`，使用
+`http://127.0.0.1:4180` 复现连接测试、创建草稿与结果回写。该测试桩不保存 PAT，
+也不用于生产环境。
+
 需要 Seed 一个可登录的本地演示账号时，只在 `server/.env` 配置：
 
 ```text
@@ -171,7 +180,7 @@ python "$env:CODEX_HOME\skills\.system\skill-creator\scripts\quick_validate.py" 
 
 - Local Demo 工作区数据保存在当前浏览器的 `localStorage` 中。
 - SaaS Dev 数据保存在本地 SQLite，并由 `workspaceId` 隔离。
-- Phase 5 的真实账号与 Dev Session 均持久化在数据库；Dev Session 仅开发环境可用。
+- Phase 6 的真实账号与 Dev Session 均持久化在数据库；Dev Session 仅开发环境可用。
 - 密码使用 Argon2id；Session 原始 token 不落库，数据库只保存 hash。
 - Cookie 使用 `HttpOnly`、`SameSite=Lax`，生产环境启用 `Secure`。
 - 本地开发模式标记仅保存在 `sessionStorage`，不代表真实登录 Session。
@@ -186,6 +195,7 @@ python "$env:CODEX_HOME\skills\.system\skill-creator\scripts\quick_validate.py" 
 - Phase 4.1 服务启动会校验关键环境变量，生产 CORS 禁止通配符。
 - API 日志包含 requestId，并对 Token、Cookie、credential 与 secret 字段脱敏。
 - 浏览器直连 Halo 只允许作为本地开发实验，不是 SaaS 正式发布链路。
+- Halo PAT 仅在服务端 Worker 请求前短时解密，API 不返回明文或密文。
 
 安全与存储说明：
 
@@ -195,15 +205,16 @@ python "$env:CODEX_HOME\skills\.system\skill-creator\scripts\quick_validate.py" 
 - [Public Release Checklist](docs/public-release-checklist.md)
 - [SaaS Security Model](docs/security-model.md)
 - [Server Token Security](docs/server-token-security.md)
+- [Platform Token Handling](docs/security-token-handling.md)
 - [API Error Format](docs/api-error-format.md)
 - [OpenAPI](docs/openapi.md)
 - [Deployment Notes](docs/deployment-notes.md)
 
 ## 当前限制
 
-- SQLite 和进程内 Mock Worker 只适合单机开发。
-- Billing、对象存储、独立队列、实时事件和真实平台 API 尚未接入。
-- 所有发布结果仍为 Mock，不会向第三方平台发送内容。
+- SQLite 和进程内 Mock/Halo Worker 只适合单机开发。
+- Billing、对象存储、独立队列、实时事件和其他第三方平台 API 尚未接入。
+- 目前只有 Halo 支持真实发布；其他平台结果仍为 Mock 或半自动建模。
 - 第三方平台能力会变化，矩阵中的“待验证”不代表官方承诺。
 - `localStorage` 容量有限，不适合图片、视频或大规模版本历史。
 - 多标签页同时编辑采用最后写入覆盖，尚无冲突合并。
@@ -234,9 +245,9 @@ SaaS 后，该设计已被服务端发布器方案取代：
 - **Phase 4**：Fastify、Prisma、SQLite、dev session、服务端 Entitlement 与 Mock Worker。
 - **Phase 4.1**：统一 API 契约、环境校验、Seed、OpenAPI、Docker 与 CI。
 - **Phase 5**：密码认证、持久 Session、Workspace 多租户、RBAC 与 PostgreSQL 兼容。
-- **Phase 5.5**：独立队列、对象存储与第三方平台半自动适配。
-- **Phase 5.5**：浏览器自动化发布实验。
-- **Phase 6**：数据回流与复盘分析。
+- **Phase 6**：服务端 Halo Publisher 与第一条真实发布链路。
+- **Phase 6.5**：独立队列、对象存储与第三方平台半自动适配。
+- **Phase 7**：数据回流与复盘分析。
 
 完整路线见 [docs/product-roadmap.md](docs/product-roadmap.md)。
 

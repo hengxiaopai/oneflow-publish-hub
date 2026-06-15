@@ -9,6 +9,7 @@
     "dev": "node scripts/dev.mjs",
     "dev:frontend": "node scripts/static-server.mjs",
     "dev:server": "npm --prefix server run dev",
+    "dev:fake-halo": "npm --prefix server run dev:fake-halo",
     "test": "npm run test:frontend && npm run test:server",
     "test:frontend": "node --test tests/*.test.js",
     "test:server": "npm --prefix server test",

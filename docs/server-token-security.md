@@ -2,7 +2,7 @@
 
 更新日期：2026-06-15
 
-## Phase 4 边界
+## Phase 6 边界
 
 `ChannelConfig` 不保存明文平台 Token。API 只接收一次性 `credential` 字段，后端
 使用 `ENCRYPTION_KEY` 加密后写入 `encryptedCredential`，响应仅返回：
@@ -14,6 +14,11 @@ credentialStorage = server_managed
 ```
 
 API 永远不返回明文或密文。
+
+Halo PAT 只在 `HaloPublisherService` 发起服务端请求前解密，并以
+`Authorization: Bearer <PAT>` 发送给用户配置的 Halo Base URL。Publisher Worker
+不得把 PAT、Authorization Header 或第三方原始响应头写入 `PublishTask`。
+`rawResponseSummary` 只保存远程 name、slug、phase 和 permalink 等非敏感字段。
 
 ## 本地加密实现
 
@@ -42,6 +47,8 @@ API 永远不返回明文或密文。
 - 不提交 `.env`、数据库文件或浏览器 profile。
 - 不在错误响应中返回 Authorization Header、Cookie 或第三方原始响应头。
 - 不允许前端读取 `encryptedCredential`。
+- 不让浏览器直连 Halo 作为 SaaS 正式发布路径。
+- 不让连接测试或发布失败消息回显请求头、Cookie、PAT 或密文。
 
 ## 导入导出
 

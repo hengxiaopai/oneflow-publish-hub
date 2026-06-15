@@ -1,12 +1,12 @@
-# Phase 5 Backend Setup
+# Phase 6 Backend Setup
 
 更新日期：2026-06-15
 
 ## 定位
 
-Phase 5 后端提供 Fastify API、Prisma、SQLite 本地开发、PostgreSQL 兼容 schema、
+Phase 6 后端提供 Fastify API、Prisma、SQLite 本地开发、PostgreSQL 兼容 schema、
 Argon2id 密码认证、持久 Cookie Session、Workspace RBAC、服务端 Entitlement、
-凭据加密字段和 Mock Publisher Worker。
+凭据加密、Mock Publisher 与服务端 Halo Publisher。
 
 ## 环境要求
 
@@ -28,6 +28,15 @@ npm run dev
 
 `npm run dev` 同时启动前端与后端。也可分别使用 `npm run dev:frontend` 和
 `npm run dev:server`。
+
+需要在没有真实 Halo 实例时复现服务端发布链路，可另开终端运行：
+
+```powershell
+npm run dev:fake-halo
+```
+
+该测试桩默认监听 `http://127.0.0.1:4180`，仅模拟连接检查、创建草稿和发布草稿，
+不保存 PAT，也不用于生产环境。
 
 打开 `http://127.0.0.1:4173/#/login`，选择：
 
@@ -102,6 +111,6 @@ Compose 启动后端与持久化 SQLite volume。完整边界见
 
 - Dev Session 和真实账号 Session 均持久化在数据库中；Dev Session 仍只允许开发环境。
 - SQLite 适合单机开发，不提供生产级并发、备份和高可用。
-- Mock Worker 在 API 进程内同步执行，没有 Durable Queue。
-- 未接 OAuth、邮件、支付、对象存储或真实平台 API。
+- Mock 与 Halo Worker 都在 API 进程内同步执行，没有 Durable Queue。
+- 目前仅 Halo 是真实平台链路；其他第三方渠道仍未接真实 API。
 - 生产环境应迁移 PostgreSQL、KMS、独立 Worker，并补齐邮箱验证、MFA 与 CSRF。

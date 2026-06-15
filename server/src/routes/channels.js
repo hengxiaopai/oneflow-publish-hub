@@ -18,6 +18,7 @@ const channelProperties = {
     enum: ["article", "image_text", "short_video"],
   },
   configuration: { type: "object", additionalProperties: true },
+  publisherMode: { type: "string", enum: ["mock", "halo"] },
   credential: { type: "string", minLength: 1, maxLength: 10000 },
   mockBehavior: {
     type: "string",

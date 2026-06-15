@@ -19,10 +19,14 @@ export function channelView(channel) {
     displayName: channel.displayName,
     channelType: channel.channelType,
     configuration: parseJson(channel.configuration, {}),
+    publisherMode: channel.publisherMode,
     credentialStatus: channel.credentialStatus,
     connectionStatus: channel.connectionStatus,
     mockBehavior: channel.mockBehavior,
     lastVerifiedAt: channel.lastVerifiedAt,
+    lastTestedAt: channel.lastTestedAt,
+    lastTestStatus: channel.lastTestStatus,
+    lastTestMessage: channel.lastTestMessage,
     createdAt: channel.createdAt,
     updatedAt: channel.updatedAt,
     credentialStorage: "server_managed",
@@ -36,6 +40,7 @@ export function createChannelData(input, encryptionKey) {
     displayName: input.displayName,
     channelType: input.channelType || "article",
     configuration: JSON.stringify(input.configuration || {}),
+    publisherMode: input.publisherMode || "mock",
     encryptedCredential: hasCredential
       ? encryptCredential(input.credential, encryptionKey)
       : null,
@@ -52,6 +57,7 @@ export function updateChannelData(input, encryptionKey) {
   if ("configuration" in input) {
     data.configuration = JSON.stringify(input.configuration || {});
   }
+  if ("publisherMode" in input) data.publisherMode = input.publisherMode;
   if ("mockBehavior" in input) data.mockBehavior = input.mockBehavior;
   if ("credential" in input) {
     data.encryptedCredential = input.credential

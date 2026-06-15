@@ -1,141 +1,91 @@
-# Server-Side Publisher Design
+# Server-side Publisher Design
 
 更新日期：2026-06-15
 
-## Phase 4 已实现切片
+## Phase 6 已实现
 
-当前后端在创建 PublishBatch 时：
+当前后端包含三个明确角色：
 
-1. 服务端检查 Free 套餐发布额度。
-2. 按 `workspaceId` 读取 Article 和 ChannelConfig。
-3. 保存不可变 `articleSnapshot` 和 `channelVersionSnapshot`。
-4. 生成 PublishTask。
-5. 由进程内 `MockPublisherService` 推进
-   `pending -> validating -> queued -> running -> draft_created/published/failed`。
-6. 回写 mock remote URL、耗时、结果或脱敏错误。
-7. 失败任务可通过 `/api/publish-tasks/:id/retry` 重试。
+- `MockPublisherService`：本地开发与自动测试。
+- `HaloPublisherService`：Halo 2.x 请求、映射、验证和错误归一化。
+- `PublisherRouterService`：根据任务平台与 `publisherMode` 选择发布器。
 
-这只是 Worker 雏形。它没有独立队列、跨进程锁、幂等键、延迟重试或死信队列。
+Halo 任务条件：
 
-## 核心原则
+```text
+task.channelConfig.platformId === "halo"
+&& task.channelConfig.publisherMode === "halo"
+```
 
-- MockPublisher 仅用于本地开发和自动测试。
-- HaloPublisher 在正式 SaaS 中由后端 Worker 执行。
-- 前端只创建 PublishBatch 请求和展示任务状态。
-- 浏览器不持有 Halo PAT，不直接调用第三方平台 API。
-- 正式发布链路不依赖第三方 CORS。
+其他任务继续使用 MockPublisher。
 
-## 执行流程
+## 执行链路
 
 ```mermaid
 sequenceDiagram
-  participant UI as Frontend
-  participant API as OneFlow API
-  participant DB as Database
-  participant Q as Queue
-  participant W as Publisher Worker
-  participant V as Credential Vault
-  participant P as Platform API
+  participant UI as OneFlow Frontend
+  participant API as Fastify API
+  participant DB as Prisma Database
+  participant R as Publisher Router
+  participant W as Halo Worker
+  participant H as Halo Console API
 
   UI->>API: POST /api/publish-batches
-  API->>API: Auth + Role + Entitlement + Validation
-  API->>DB: Create snapshots, batch and tasks
-  API->>Q: Enqueue task IDs
-  API-->>UI: 202 PublishBatch
-  Q->>W: Deliver PublishTask
-  W->>V: Read encrypted credential
-  V-->>W: Short-lived decrypted credential
-  W->>P: Create draft / publish
-  P-->>W: Remote result
-  W->>DB: Update task and audit event
-  UI->>API: Poll or subscribe
-  API-->>UI: Updated task status
+  API->>API: Session + RBAC + Entitlement
+  API->>DB: Save article/channel snapshots and tasks
+  API->>R: runBatch(batchId)
+  R->>W: runTask(taskId)
+  W->>DB: Read encrypted PAT and immutable snapshots
+  W->>W: Validate config, payload, sanitizer and stale state
+  W->>H: POST Console API /posts
+  H-->>W: Halo Post
+  opt publishMode = publish
+    W->>H: PUT /posts/{name}/publish
+    H-->>W: Published Halo Post
+  end
+  W->>DB: Write remote fields, status, timing and safe summary
+  API-->>UI: PublishBatch detail
 ```
 
-## 前端职责
-
-- 选择 ready 渠道。
-- 展示发布前检查和套餐限制。
-- 发送文章版本 ID、渠道 ID、策略和幂等键。
-- 展示 queued、running、succeeded、failed 等状态。
-- 提供重试、取消和查看远程链接入口。
-
-前端不发送平台 Token，也不决定最终权限。
-
-## API 服务职责
-
-1. 验证 Session、WorkspaceMember 和 Role。
-2. 验证 Plan、Entitlement 和 UsageQuota。
-3. 重新检查版本是否 stale、授权状态和 ValidationIssue。
-4. 事务创建 ArticleSnapshot、ChannelVersionSnapshot、PublishBatch 和
-   PublishTask。
-5. 为每个任务生成幂等键。
-6. 写入队列并返回 `202 Accepted`。
-
-## Worker 职责
-
-- 根据 `publisherAdapter` 加载 Halo 或其他平台 Adapter。
-- 从 Vault 获取凭据，不把凭据写回任务。
-- 执行 `validateConfig`、`validatePayload` 和发布操作。
-- 将远程 ID、URL、状态、耗时和脱敏错误写回。
-- 对可重试错误执行指数退避。
-- 对权限失败和载荷错误不自动重试。
-- 更新 UsageRecord、AuditEvent 和状态事件。
-
-## 状态模型
+## 状态
 
 ```text
 pending
-queued
 validating
+queued
+running
 creating_draft
 draft_created
 publishing
 published
 failed
 retrying
-cancelled
 ```
 
-## 幂等与重试
+失败重试复用原始 ArticleSnapshot 和 ChannelVersionSnapshot，不读取当前编辑中的文章。
 
-- PublishTask 保存 `idempotencyKey`。
-- 同一键重复执行时复用已有远程结果。
-- 平台不支持幂等键时，先检查已保存 remotePostId。
-- 重试使用原始快照，不读取当前编辑中的文章。
-- 超过最大重试次数后进入 dead letter，并提示人工处理。
+## 发布前检查
 
-## Halo Adapter
+Halo Worker 在远程请求前检查：
 
-Halo Worker 可以使用已确认的 Halo 2.x Console API：
+- ChannelConfig 存在且属于当前 Workspace。
+- `credentialStatus = stored` 且密文可解密。
+- Base URL、Console API Endpoint 和 publishMode 有效。
+- 标题、正文和 slug 有效。
+- HTML 与服务端 sanitizer 输出一致。
+- ChannelVersion 不是 `stale` 或 `needs_adaptation`。
 
-- 创建草稿：`POST /apis/api.console.halo.run/v1alpha1/posts`
-- 发布草稿：`PUT /apis/api.console.halo.run/v1alpha1/posts/{name}/publish`
+失败时不创建远程草稿，任务写为 `failed`，同时创建 `ValidationIssue`。
 
-具体 Endpoint 作为服务端 Channel 配置，不由浏览器拼接。PAT 在 Vault 中加密保存。
+## 安全边界
 
-## 状态回传
+- PAT 只在后端执行请求前短时解密。
+- Channel API 不返回明文或 `encryptedCredential`。
+- 日志对 credential、Authorization、Cookie 和 secret 脱敏。
+- `rawResponseSummary` 只保存 name、slug、phase 和 permalink。
+- owner/admin 可修改凭据；editor/viewer 只能读取非敏感连接状态。
 
-第一阶段可轮询：
+## 当前限制
 
-```text
-GET /api/publish-batches/:id
-```
-
-后续可使用 SSE 或 WebSocket 推送：
-
-```json
-{
-  "type": "publish_task.updated",
-  "workspaceId": "ws_01",
-  "batchId": "pb_01",
-  "taskId": "pt_01",
-  "status": "draft_created",
-  "occurredAt": "2026-06-14T12:00:00Z"
-}
-```
-
-## 本地模式
-
-MockPublisher 可以在浏览器或 Node 测试中模拟成功、失败和重试。它不能被当作真实
-平台能力证明。浏览器直连 Halo 只保留为本地实验，不属于正式 SaaS 架构。
+Worker 仍在 API 进程内同步执行，尚无 Durable Queue、租约、幂等键、指数退避和死信
+队列。生产环境应使用 PostgreSQL、独立 Worker、KMS/envelope encryption 和任务队列。

@@ -7,6 +7,7 @@ import {
 
 const articleProperties = {
   title: { type: "string", minLength: 1, maxLength: 240 },
+  slug: { type: "string", maxLength: 200 },
   summary: { type: "string", maxLength: 2000 },
   contentHtml: { type: "string", maxLength: 2000000 },
   contentMarkdown: { type: "string", maxLength: 2000000 },

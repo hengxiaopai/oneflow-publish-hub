@@ -114,6 +114,15 @@ test("API methods expose the Phase 4 endpoints", async () => {
   await client.createPublishBatch({ articleId: "a", channelIds: ["c"] });
   await client.listPublishBatches();
   await client.getUsage();
+  await client.getHaloStatus();
+  await client.connectHaloChannel({
+    baseUrl: "https://blog.example.test",
+    consoleApiEndpoint: "/apis/api.console.halo.run/v1alpha1",
+    credential: "pat_not_stored_by_client",
+    publishMode: "draft",
+  });
+  await client.testHaloConnection();
+  await client.clearHaloCredential();
 
   assert.deepEqual(
     calls.map(([url, method]) => [new URL(url).pathname, method]),
@@ -124,6 +133,10 @@ test("API methods expose the Phase 4 endpoints", async () => {
       ["/api/publish-batches", "POST"],
       ["/api/publish-batches", "GET"],
       ["/api/usage", "GET"],
+      ["/api/channels/halo/status", "GET"],
+      ["/api/channels/halo/connect", "POST"],
+      ["/api/channels/halo/test", "POST"],
+      ["/api/channels/halo/clear-credential", "POST"],
     ]
   );
 });

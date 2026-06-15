@@ -2,7 +2,7 @@
 
 更新日期：2026-06-15
 
-## Phase 5 实现状态
+## Phase 6 实现状态
 
 当前 Fastify 服务已实现：
 
@@ -23,6 +23,10 @@ GET  /api/channels
 POST /api/channels
 PUT  /api/channels/:id
 POST /api/channels/:id/test
+GET  /api/channels/halo/status
+POST /api/channels/halo/connect
+POST /api/channels/halo/test
+POST /api/channels/halo/clear-credential
 POST /api/publish-batches
 GET  /api/publish-batches
 GET  /api/publish-batches/:id
@@ -307,6 +311,23 @@ search=...
 错误：`CHANNEL_NOT_CONNECTED`、`RATE_LIMITED`。
 
 权限：`admin+`。套餐校验：是，可计入连接测试额度。
+
+### Halo 专用连接 API
+
+`GET /api/channels/halo/status` 返回 Halo 非敏感配置、`credentialStatus`、
+`connectionStatus` 和最近测试结果。
+
+`POST /api/channels/halo/connect` 接收 Base URL、可配置 Console API Endpoint、
+一次性 PAT、发布模式和默认分类/标签/作者/封面策略。PAT 加密后不回传。
+
+`POST /api/channels/halo/test` 由后端携带已保存 PAT 调用 Console API 文章列表，不让
+浏览器直连 Halo。
+
+`POST /api/channels/halo/clear-credential` 删除密文并将连接状态改为未连接。
+
+修改、测试和清除要求 `admin+`；状态读取要求 `viewer+`。错误使用统一 envelope，
+常见错误码为 `HALO_AUTH_FAILED`、`HALO_ENDPOINT_NOT_FOUND`、
+`HALO_NETWORK_ERROR`。
 
 ## Publish
 

@@ -1,3 +1,5 @@
+import { refreshPublishBatch } from "./publishBatchStatusService.js";
+
 function parseJson(value, fallback = {}) {
   try {
     return JSON.parse(value);
@@ -7,27 +9,6 @@ function parseJson(value, fallback = {}) {
 }
 
 export function createMockPublisherService(prisma) {
-  async function refreshBatch(batchId) {
-    const tasks = await prisma.publishTask.findMany({
-      where: { publishBatchId: batchId },
-    });
-    const hasFailure = tasks.some((task) => task.status === "failed");
-    const allFinished = tasks.every((task) =>
-      ["draft_created", "published", "failed"].includes(task.status),
-    );
-    return prisma.publishBatch.update({
-      where: { id: batchId },
-      data: {
-        status: allFinished
-          ? hasFailure
-            ? "partial_failed"
-            : "completed"
-          : "running",
-        completedAt: allFinished ? new Date() : null,
-      },
-    });
-  }
-
   async function runTask(taskId) {
     const task = await prisma.publishTask.findUnique({
       where: { id: taskId },
@@ -70,7 +51,7 @@ export function createMockPublisherService(prisma) {
           durationMs,
         },
       });
-      await refreshBatch(task.publishBatchId);
+      await refreshPublishBatch(prisma, task.publishBatchId);
       return failed;
     }
 
@@ -95,7 +76,7 @@ export function createMockPublisherService(prisma) {
         errorMessage: null,
       },
     });
-    await refreshBatch(task.publishBatchId);
+    await refreshPublishBatch(prisma, task.publishBatchId);
     return succeeded;
   }
 

@@ -41,6 +41,7 @@ model Workspace {
   publishTasks    PublishTask[]
   aiCapabilities  AICapability[]
   usageRecords    UsageRecord[]
+  validationIssues ValidationIssue[]
   subscription    Subscription?
 
   @@index([ownerId])
@@ -95,6 +96,7 @@ model Article {
   id              String           @id @default(cuid())
   workspaceId     String
   title           String
+  slug            String           @default("")
   summary         String           @default("")
   contentHtml     String           @default("")
   contentMarkdown String           @default("")
@@ -117,11 +119,15 @@ model ChannelConfig {
   displayName         String
   channelType         String           @default("article")
   configuration       String           @default("{}")
+  publisherMode       String           @default("mock")
   encryptedCredential String?
   credentialStatus    String           @default("none")
   connectionStatus    String           @default("not_connected")
   mockBehavior        String           @default("success")
   lastVerifiedAt      DateTime?
+  lastTestedAt        DateTime?
+  lastTestStatus      String?
+  lastTestMessage     String?
   createdAt           DateTime         @default(now())
   updatedAt           DateTime         @updatedAt
   workspace           Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
@@ -183,6 +189,16 @@ model PublishTask {
   channelVersionSnapshot String
   result                 String?
   remoteUrl              String?
+  remotePostId           String?
+  remotePostName         String?
+  remoteEditUrl          String?
+  remotePreviewUrl       String?
+  remotePublicUrl        String?
+  remoteStatus           String?
+  draftCreatedAt         DateTime?
+  publishedAt            DateTime?
+  lastSyncAt             DateTime?
+  rawResponseSummary     String?
   errorMessage           String?
   retryCount             Int             @default(0)
   startedAt              DateTime?
@@ -194,9 +210,26 @@ model PublishTask {
   publishBatch           PublishBatch    @relation(fields: [publishBatchId], references: [id], onDelete: Cascade)
   channelConfig          ChannelConfig?  @relation(fields: [channelConfigId], references: [id], onDelete: SetNull)
   channelVersion         ChannelVersion? @relation(fields: [channelVersionId], references: [id], onDelete: SetNull)
+  validationIssues       ValidationIssue[]
 
   @@index([workspaceId, status])
   @@index([publishBatchId])
+}
+
+model ValidationIssue {
+  id            String       @id @default(cuid())
+  workspaceId   String
+  publishTaskId String?
+  code          String
+  severity      String       @default("error")
+  field         String?
+  message       String
+  createdAt     DateTime     @default(now())
+  workspace     Workspace    @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  publishTask   PublishTask? @relation(fields: [publishTaskId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([publishTaskId])
 }
 
 model AICapability {

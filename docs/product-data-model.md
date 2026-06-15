@@ -1,6 +1,6 @@
 # Product Data Model
 
-更新日期：2026-06-14
+更新日期：2026-06-15
 
 ## 建模原则
 
@@ -104,6 +104,28 @@ schema version 3 的本地快照，`mergePersistedState()` 负责用当前默认
 
 当前对应：`productState.channels`。
 
+## ChannelConfig（SaaS 服务端）
+
+Workspace 下可执行发布的服务端渠道连接。Phase 6 的 Halo 配置只把非敏感映射
+保存在 `configuration`，PAT 使用 `encryptedCredential` 单独加密保存。
+
+| 字段 | 类型 | 含义 |
+|---|---|---|
+| `workspaceId` | string | Workspace 隔离边界 |
+| `platformId` | string | `halo`、`mock-blog` 等稳定平台 ID |
+| `publisherMode` | string | `halo` 或 `mock`，供 Publisher Router 选择执行器 |
+| `configuration` | JSON string | Base URL、Console API Endpoint、发布模式、默认分类/标签/作者/封面策略 |
+| `encryptedCredential` | string/null | AES-256-GCM 密文，不进入 API 响应 |
+| `credentialStatus` | string | `none`、`stored`、`expired`、`invalid` |
+| `connectionStatus` | string | `not_connected`、`connected`、`invalid`、`error` |
+| `lastTestedAt` | ISO string/null | 最近一次主动连接测试时间 |
+| `lastTestStatus` | string/null | `success` 或 `failed` |
+| `lastTestMessage` | string/null | 已脱敏的连接结果说明 |
+
+当前对应 Prisma `ChannelConfig`、`channelService.js` 和
+`routes/haloChannels.js`。保存配置不会等同于连接成功，只有服务端测试通过后
+`connectionStatus` 才变为 `connected`。
+
 ## ChannelVersion
 
 由主文章生成的某个平台专属版本。它是发布前编辑和校验的核心对象。
@@ -192,6 +214,16 @@ schema version 3 的本地快照，`mergePersistedState()` 负责用当前默认
 | `lastError` | string/null | 最近失败原因 |
 | `publishedUrl` | string/null | 发布成功后的平台链接 |
 | `feedback` | object/null | 数据回流结果 |
+| `remotePostId` | string/null | 第三方平台文章 ID |
+| `remotePostName` | string/null | Halo Post `metadata.name` |
+| `remoteEditUrl` | string/null | 平台编辑页 |
+| `remotePreviewUrl` | string/null | 草稿预览页 |
+| `remotePublicUrl` | string/null | 公开文章地址 |
+| `remoteStatus` | string/null | `DRAFT`、`PUBLISHED` 等平台状态 |
+| `draftCreatedAt` | ISO string/null | 远程草稿创建时间 |
+| `publishedAt` | ISO string/null | 远程公开发布时间 |
+| `lastSyncAt` | ISO string/null | 最近结果回写时间 |
+| `rawResponseSummary` | JSON string/null | 仅保留 name、slug、phase、permalink 等脱敏摘要 |
 
 ```json
 {
@@ -206,7 +238,8 @@ schema version 3 的本地快照，`mergePersistedState()` 负责用当前默认
 ```
 
 当前对应：`productState.publishTasks`。`applyChannelTransition()` 处理确认、
-授权和重试。
+授权和重试。SaaS 模式由 `publishService.js`、Publisher Router 与对应 Worker
+执行，历史任务保存创建时的文章和平台版本快照。
 
 ## PublishBatch
 
@@ -298,6 +331,11 @@ schema version 3 的本地快照，`mergePersistedState()` 负责用当前默认
 | `published` | 发布成功 |
 | `partial` | 批次部分成功 |
 
+服务端执行任务还会经过 `pending`、`validating`、`queued`、`running`、
+`creating_draft`、`draft_created`、`publishing`、`failed` 和 `retrying`。
+Halo 默认停在 `draft_created`；只有渠道明确配置“创建并发布”时才继续到
+`publishing` / `published`。
+
 当前对应：`PUBLISH_STATUS` 和 `STATUS_PRESENTATION`。中文状态只在视图层
 生成，不作为领域判断条件。
 
@@ -309,6 +347,8 @@ schema version 3 的本地快照，`mergePersistedState()` 负责用当前默认
 |---|---|---|
 | `id` | string | 校验问题标识 |
 | `channelVersionId` | string | 关联 ChannelVersion |
+| `workspaceId` | string/null | SaaS 数据隔离边界 |
+| `publishTaskId` | string/null | 服务端发布前检查关联的 PublishTask |
 | `severity` | string | `info`、`warning`、`error` |
 | `code` | string | 稳定的问题代码 |
 | `field` | string | 问题所属字段或领域 |

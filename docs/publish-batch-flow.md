@@ -1,6 +1,6 @@
 # Publish Batch Flow
 
-更新日期：2026-06-14
+更新日期：2026-06-15
 
 ## 状态链路
 
@@ -64,6 +64,17 @@
 
 复用不会立即创建新记录，只恢复原批次渠道选择和可发布任务。用户仍需在工作台
 检查并点击发布。
+
+## Phase 6 Halo 批次
+
+服务端 Halo 渠道进入批次后，Publisher Router 将任务交给 Halo Worker：
+
+1. 校验套餐、Workspace、ChannelConfig、密文、正文、sanitizer、slug 和 stale。
+2. `POST` Halo Console API 创建草稿。
+3. 默认停在 `draft_created`。
+4. 仅当配置为 `publish` 时，再调用 publish endpoint。
+5. PublishTask 回写 Post Name、编辑/预览/公开链接、远程状态和时间。
+6. 失败任务保留不可变快照，可通过 retry API 重试。
 
 ## 后端接入风险
 

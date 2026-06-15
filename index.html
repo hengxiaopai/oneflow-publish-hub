@@ -681,6 +681,139 @@
       </form>
     </dialog>
 
+    <dialog class="halo-connection-dialog" id="halo-connection-dialog">
+      <form class="halo-connection-panel" id="halo-connection-form">
+        <header class="halo-connection-header">
+          <div>
+            <span class="eyebrow">Server-side Publisher</span>
+            <h2>连接自建 Blog / Halo</h2>
+            <p>Token 由服务端加密保存，浏览器不会长期持有。</p>
+          </div>
+          <button
+            class="small-button"
+            id="close-halo-connection"
+            type="button"
+            aria-label="关闭 Halo 连接设置"
+          >
+            关闭
+          </button>
+        </header>
+
+        <div class="halo-mode-warning" id="halo-mode-warning" hidden>
+          Local Demo Mode 不支持真实 Halo 发布，请切换到 SaaS Auth Mode。
+        </div>
+
+        <div class="halo-connection-status" id="halo-connection-status">
+          <span class="connection-chip">未连接</span>
+          <p>配置 Halo 2.x Console API 与 PAT 后，可由服务端 Worker 创建草稿。</p>
+        </div>
+
+        <div class="halo-form-grid">
+          <label>
+            <span>连接名称</span>
+            <input
+              id="halo-display-name"
+              name="displayName"
+              type="text"
+              value="自建 Blog / Halo"
+              maxlength="120"
+            />
+          </label>
+          <label>
+            <span>Halo Base URL</span>
+            <input
+              id="halo-base-url"
+              name="baseUrl"
+              type="url"
+              placeholder="https://blog.example.com"
+              required
+            />
+          </label>
+          <label class="is-wide">
+            <span>Console API Endpoint</span>
+            <input
+              id="halo-console-endpoint"
+              name="consoleApiEndpoint"
+              type="text"
+              value="/apis/api.console.halo.run/v1alpha1"
+              required
+            />
+          </label>
+          <label class="is-wide">
+            <span>PAT Token</span>
+            <input
+              id="halo-pat-token"
+              name="credential"
+              type="password"
+              autocomplete="new-password"
+              placeholder="保存后不会在这里回显"
+            />
+            <small>仅通过当前请求发送给 OneFlow 后端，不进入日志、截图或导出 JSON。</small>
+          </label>
+          <label>
+            <span>发布模式</span>
+            <select id="halo-publish-mode" name="publishMode">
+              <option value="draft">创建草稿</option>
+              <option value="publish">创建并发布</option>
+            </select>
+          </label>
+          <label>
+            <span>默认分类</span>
+            <input
+              id="halo-default-category"
+              name="defaultCategory"
+              type="text"
+              placeholder="Halo 分类 metadata.name"
+            />
+          </label>
+          <label>
+            <span>默认标签</span>
+            <input
+              id="halo-default-tags"
+              name="defaultTags"
+              type="text"
+              placeholder="oneflow, ai-creator"
+            />
+          </label>
+          <label>
+            <span>默认作者</span>
+            <input
+              id="halo-default-owner"
+              name="defaultOwner"
+              type="text"
+              placeholder="Halo 用户 metadata.name"
+            />
+          </label>
+          <label>
+            <span>默认封面策略</span>
+            <select id="halo-cover-strategy" name="defaultCoverStrategy">
+              <option value="article_cover">使用文章封面</option>
+              <option value="none">允许无封面</option>
+            </select>
+          </label>
+        </div>
+
+        <footer class="halo-connection-actions">
+          <button
+            class="danger-button"
+            id="clear-halo-credential"
+            type="button"
+          >
+            清除凭据
+          </button>
+          <span class="halo-action-spacer"></span>
+          <button
+            class="secondary-button"
+            id="test-halo-connection"
+            type="button"
+          >
+            测试连接
+          </button>
+          <button class="primary-button" type="submit">保存连接</button>
+        </footer>
+      </form>
+    </dialog>
+
     <div class="toast" id="toast" role="status" aria-live="polite"></div>
     <div class="shell-toast" id="shell-toast" role="status" aria-live="polite"></div>
     <div class="panel-scrim" id="panel-scrim" hidden></div>

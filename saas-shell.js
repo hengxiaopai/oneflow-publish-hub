@@ -167,6 +167,7 @@
       remoteWorkspace: null,
       remoteArticles: [],
       remoteChannels: [],
+      haloStatus: null,
       remotePublishBatches: [],
       remoteArticleId: null,
     };
@@ -365,6 +366,15 @@
       .replaceAll('"', "&quot;");
   }
 
+  function safeExternalUrl(value) {
+    try {
+      const url = new URL(String(value || ""));
+      return ["http:", "https:"].includes(url.protocol) ? url.toString() : "";
+    } catch {
+      return "";
+    }
+  }
+
   function formatDate(value) {
     if (!value) return "尚未保存";
     return new Intl.DateTimeFormat("zh-CN", {
@@ -476,38 +486,60 @@
   }
 
   function renderChannels(container, workspace, state) {
-    const channels =
-      isRemoteMode(state.sessionMode)
-        ? state.remoteChannels.map((channel) => ({
-            id: channel.id,
-            platform: channel.displayName,
-            type:
-              channel.channelType === "short_video"
-                ? "短视频"
-                : channel.channelType === "image_text"
-                  ? "图文"
-                  : "文章",
-            mark: String(channel.displayName || "C").slice(0, 1),
-            connectionStatus:
-              channel.connectionStatus === "connected"
-                ? "connected"
-                : channel.connectionStatus === "invalid"
-                  ? "reauthorize"
-                  : "not_connected",
-            connectionLabel:
-              channel.connectionStatus === "connected"
-                ? "已连接"
-                : channel.connectionStatus === "invalid"
-                  ? "需要重新授权"
-                  : "未连接",
-            credentialStorage: "服务端加密托管",
-            localDebugAvailable: false,
-            action:
-              channel.connectionStatus === "connected"
-                ? "管理连接"
-                : "连接渠道",
-          }))
-        : buildChannelConnectionViews(workspace, state.sessionMode);
+    const channelTypeLabel = (channelType) =>
+      channelType === "short_video"
+        ? "短视频"
+        : channelType === "image_text"
+          ? "图文"
+          : "文章";
+    const remoteChannels = state.remoteChannels.map((channel) => ({
+      id: channel.id,
+      platformId: channel.platformId,
+      platform: channel.displayName,
+      type: channelTypeLabel(channel.channelType),
+      mark: String(channel.displayName || "C").slice(0, 1),
+      connectionStatus:
+        channel.connectionStatus === "connected"
+          ? "connected"
+          : ["invalid", "error"].includes(channel.connectionStatus)
+            ? "reauthorize"
+            : "not_connected",
+      connectionLabel:
+        channel.connectionStatus === "connected"
+          ? "已连接"
+          : ["invalid", "error"].includes(channel.connectionStatus)
+            ? "需要重新授权"
+            : "未连接",
+      credentialStorage: "服务端加密托管",
+      localDebugAvailable: false,
+      action:
+        channel.connectionStatus === "connected" ? "管理连接" : "连接渠道",
+    }));
+    if (
+      isRemoteMode(state.sessionMode) &&
+      !remoteChannels.some((channel) => channel.platformId === "halo")
+    ) {
+      remoteChannels.unshift({
+        id: state.haloStatus?.id || "halo",
+        platformId: "halo",
+        platform: "自建 Blog / Halo",
+        type: "文章",
+        mark: "H",
+        connectionStatus: "not_connected",
+        connectionLabel: "未连接",
+        credentialStorage: "服务端加密托管",
+        localDebugAvailable: false,
+        action: "连接 Halo",
+      });
+    }
+    const channels = isRemoteMode(state.sessionMode)
+      ? remoteChannels
+      : buildChannelConnectionViews(workspace, state.sessionMode).map(
+          (channel) => ({
+            ...channel,
+            platformId: channel.id === "blog" ? "halo" : channel.id,
+          })
+        );
     container.innerHTML = `
       <div class="saas-page">
         ${pageHeader(
@@ -532,7 +564,7 @@
                   </div>
                   <span class="connection-chip">${channel.connectionLabel}</span>
                   <span class="local-debug-note">${channel.localDebugAvailable ? "本地模式可临时调试" : "仅服务端连接"}</span>
-                  <button type="button" data-channel-connect="${channel.id}">${channel.action}</button>
+                  <button type="button" data-channel-connect="${channel.id}" data-channel-platform="${channel.platformId}">${channel.action}</button>
                 </article>
               `
             )
@@ -801,6 +833,14 @@
       shellToast: document.querySelector("#shell-toast"),
       profileButton: document.querySelector(".profile-button"),
       apiConnectionStatus: document.querySelector("#api-connection-status"),
+      haloDialog: document.querySelector("#halo-connection-dialog"),
+      haloForm: document.querySelector("#halo-connection-form"),
+      haloModeWarning: document.querySelector("#halo-mode-warning"),
+      haloConnectionStatus: document.querySelector("#halo-connection-status"),
+      haloToken: document.querySelector("#halo-pat-token"),
+      haloTestButton: document.querySelector("#test-halo-connection"),
+      haloClearButton: document.querySelector("#clear-halo-credential"),
+      haloCloseButton: document.querySelector("#close-halo-connection"),
     };
     let state = createSaasState();
     let toastTimer = null;
@@ -838,6 +878,118 @@
         () => refs.shellToast.classList.remove("is-visible"),
         2800
       );
+    }
+
+    function currentHaloChannel() {
+      return (
+        state.remoteChannels.find((channel) => channel.platformId === "halo") ||
+        state.haloStatus ||
+        null
+      );
+    }
+
+    function mergeHaloChannel(channel) {
+      state.haloStatus = channel;
+      if (!channel?.id) return;
+      state.remoteChannels = [
+        channel,
+        ...state.remoteChannels.filter((item) => item.id !== channel.id),
+      ];
+    }
+
+    function setHaloBusy(busy) {
+      refs.haloForm
+        ?.querySelectorAll("button")
+        .forEach((button) => (button.disabled = busy));
+    }
+
+    function updateHaloDialog() {
+      if (!refs.haloForm) return;
+      const channel = currentHaloChannel();
+      const configuration = channel?.configuration || {};
+      const localOnly = state.sessionMode === "local";
+      const field = (name) => refs.haloForm.elements.namedItem(name);
+      field("displayName").value =
+        channel?.displayName || "自建 Blog / Halo";
+      field("baseUrl").value = configuration.baseUrl || "";
+      field("consoleApiEndpoint").value =
+        configuration.consoleApiEndpoint ||
+        "/apis/api.console.halo.run/v1alpha1";
+      field("credential").value = "";
+      field("credential").placeholder =
+        channel?.credentialStatus === "stored"
+          ? "已由服务端加密保存，如需更换请重新输入"
+          : "输入 Halo PAT Token";
+      field("publishMode").value = configuration.publishMode || "draft";
+      field("defaultCategory").value = Array.isArray(
+        configuration.defaultCategory
+      )
+        ? configuration.defaultCategory.join(", ")
+        : configuration.defaultCategory || "";
+      field("defaultTags").value = (
+        configuration.defaultTags || []
+      ).join(", ");
+      field("defaultOwner").value = configuration.defaultOwner || "";
+      field("defaultCoverStrategy").value =
+        configuration.defaultCoverStrategy || "article_cover";
+      refs.haloModeWarning.hidden = !localOnly;
+      refs.haloForm
+        .querySelectorAll("input, select")
+        .forEach((control) => (control.disabled = localOnly));
+      const connectionStatus =
+        channel?.connectionStatus || "not_connected";
+      const statusLabels = {
+        connected: "已连接",
+        invalid: "需要重新授权",
+        error: "连接异常",
+        not_connected: "未连接",
+      };
+      refs.haloConnectionStatus.dataset.status = connectionStatus;
+      refs.haloConnectionStatus.innerHTML = `
+        <span class="connection-chip">${statusLabels[connectionStatus] || "未连接"}</span>
+        <p>${
+          channel?.lastTestMessage
+            ? escapeHtml(channel.lastTestMessage)
+            : channel?.credentialStatus === "stored"
+              ? "凭据已由服务端加密保存，建议在发布前测试连接。"
+              : "配置 Halo 2.x Console API 与 PAT 后，可由服务端 Worker 创建草稿。"
+        }</p>
+      `;
+      refs.haloTestButton.disabled =
+        localOnly || channel?.credentialStatus !== "stored";
+      refs.haloClearButton.disabled =
+        localOnly || channel?.credentialStatus !== "stored";
+      refs.haloForm.querySelector('button[type="submit"]').disabled =
+        localOnly;
+    }
+
+    function openHaloDialog() {
+      updateHaloDialog();
+      refs.haloDialog?.showModal();
+    }
+
+    function haloFormPayload() {
+      const form = new globalScope.FormData(refs.haloForm);
+      const payload = {
+        displayName: String(form.get("displayName") || "").trim(),
+        baseUrl: String(form.get("baseUrl") || "").trim(),
+        consoleApiEndpoint: String(
+          form.get("consoleApiEndpoint") || ""
+        ).trim(),
+        publishMode: String(form.get("publishMode") || "draft"),
+        defaultCategory: String(form.get("defaultCategory") || "").trim(),
+        defaultTags: String(form.get("defaultTags") || "")
+          .split(",")
+          .map((value) => value.trim())
+          .filter(Boolean),
+        defaultOwner: String(form.get("defaultOwner") || "").trim(),
+        defaultCoverStrategy: String(
+          form.get("defaultCoverStrategy") || "article_cover"
+        ),
+      };
+      const credential = String(form.get("credential") || "").trim();
+      if (credential) payload.credential = credential;
+      return payload;
     }
 
     function setSaasDevStatus(message, status = "loading") {
@@ -928,11 +1080,12 @@
         throw new Error("后端 API Client 未加载，可切换到本地演示模式。");
       }
       const auth = sessionContext || (await apiClient.getCurrentUser());
-      const [usage, articles, channels, batches] = await Promise.all([
+      const [usage, articles, channels, batches, haloStatus] = await Promise.all([
         apiClient.getUsage(),
         apiClient.listArticles(),
         apiClient.listChannels(),
         apiClient.listPublishBatches(),
+        apiClient.getHaloStatus(),
       ]);
       state =
         mode === "saas_auth"
@@ -947,6 +1100,7 @@
       state.usage = usageFromApi(usage);
       state.remoteArticles = articles;
       state.remoteChannels = channels;
+      state.haloStatus = haloStatus;
       state.remotePublishBatches = batches;
       if (mode === "saas_dev") {
         await ensureSaasSeedData();
@@ -1118,6 +1272,53 @@
               const failed = tasks.filter(
                 (task) => task.status === "failed"
               ).length;
+              const taskDetails = tasks
+                .map((task) => {
+                  const version = task.channelVersionSnapshot || {};
+                  const editUrl = safeExternalUrl(task.remoteEditUrl);
+                  const previewUrl = safeExternalUrl(task.remotePreviewUrl);
+                  const publicUrl = safeExternalUrl(task.remotePublicUrl);
+                  return `
+                    <section class="remote-task-card">
+                      <div>
+                        <strong>${escapeHtml(version.platformName || version.platformId || "发布渠道")}</strong>
+                        <small>${escapeHtml(version.title || batch.articleSnapshot?.title || "平台版本")}</small>
+                      </div>
+                      <div>
+                        <span class="status-chip">${escapeHtml(task.remoteStatus || task.status)}</span>
+                        <small>Post Name: ${escapeHtml(task.remotePostName || "尚未创建")}</small>
+                      </div>
+                      <div class="remote-task-links">
+                        ${
+                          editUrl
+                            ? `<a href="${escapeHtml(editUrl)}" target="_blank" rel="noopener noreferrer">打开 Halo 编辑页</a>`
+                            : ""
+                        }
+                        ${
+                          previewUrl
+                            ? `<button type="button" data-copy-remote-url="${escapeHtml(previewUrl)}">复制预览链接</button>`
+                            : ""
+                        }
+                        ${
+                          publicUrl
+                            ? `<button type="button" data-copy-remote-url="${escapeHtml(publicUrl)}">复制公开链接</button>`
+                            : ""
+                        }
+                        ${
+                          task.status === "failed"
+                            ? `<button type="button" data-remote-task-retry="${escapeHtml(task.id)}">重试任务</button>`
+                            : ""
+                        }
+                      </div>
+                      ${
+                        task.errorMessage
+                          ? `<small class="is-danger">错误：${escapeHtml(task.errorMessage)} · 已重试 ${Number(task.retryCount) || 0} 次</small>`
+                          : `<small>草稿创建：${formatDate(task.draftCreatedAt)} · 发布：${formatDate(task.publishedAt)}</small>`
+                      }
+                    </section>
+                  `;
+                })
+                .join("");
               return `
                 <article class="history-row">
                   <time>${formatDate(batch.createdAt)}</time>
@@ -1130,6 +1331,10 @@
                     <span class="${failed ? "is-danger" : ""}">${failed} 失败</span>
                   </div>
                   <span class="history-strategy">${escapeHtml(batch.strategy)}</span>
+                  <div class="history-actions">
+                    <span>${escapeHtml(batch.status)}</span>
+                  </div>
+                  <div class="remote-task-list">${taskDetails}</div>
                 </article>
               `;
             })
@@ -1254,9 +1459,45 @@
         return;
       }
 
+      const copyRemote = event.target.closest("[data-copy-remote-url]");
+      if (copyRemote) {
+        try {
+          await globalScope.navigator.clipboard.writeText(
+            copyRemote.dataset.copyRemoteUrl
+          );
+          showShellToast("远程链接已复制。");
+        } catch {
+          showShellToast("浏览器未允许复制，请打开链接后手动复制。");
+        }
+        return;
+      }
+
+      const retryRemote = event.target.closest("[data-remote-task-retry]");
+      if (retryRemote) {
+        retryRemote.disabled = true;
+        try {
+          await apiClient.retryPublishTask(
+            retryRemote.dataset.remoteTaskRetry
+          );
+          state.remotePublishBatches =
+            await apiClient.listPublishBatches();
+          renderRemotePublishHistory();
+          showShellToast("发布任务已重试。");
+        } catch (error) {
+          showShellToast(error.message);
+        } finally {
+          retryRemote.disabled = false;
+        }
+        return;
+      }
+
       const channelAction = event.target.closest("[data-channel-connect]");
       if (channelAction) {
-        showShellToast("正式连接将跳转服务端授权流程，本地版本不保存长期凭据。");
+        if (channelAction.dataset.channelPlatform === "halo") {
+          openHaloDialog();
+        } else {
+          showShellToast("该平台仍处于能力验证阶段，当前不保存长期凭据。");
+        }
         return;
       }
 
@@ -1280,7 +1521,7 @@
       } else if (action === "import-markdown") {
         app.openImport();
       } else if (action === "connect-channel") {
-        showShellToast("渠道授权将由后端连接服务处理，当前为产品占位。");
+        openHaloDialog();
       } else if (action === "media-upload") {
         showShellToast("对象存储尚未接入，当前不会上传文件。");
       } else if (action === "billing-upgrade") {
@@ -1338,6 +1579,75 @@
       setAuthMode("register")
     );
     refs.authForm.addEventListener("submit", submitSaasAuthentication);
+    refs.haloCloseButton.addEventListener("click", () =>
+      refs.haloDialog.close()
+    );
+    refs.haloForm.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      if (!isRemoteMode(state.sessionMode)) {
+        showShellToast(
+          "Local Demo Mode 不支持真实 Halo 发布，请切换到 SaaS Auth Mode。"
+        );
+        return;
+      }
+      setHaloBusy(true);
+      try {
+        const channel = await apiClient.connectHaloChannel(
+          haloFormPayload()
+        );
+        mergeHaloChannel(channel);
+        updateHaloDialog();
+        renderRoute();
+        showShellToast("Halo 连接已保存，Token 已由服务端加密托管。");
+      } catch (error) {
+        showShellToast(error.message);
+      } finally {
+        setHaloBusy(false);
+        updateHaloDialog();
+      }
+    });
+    refs.haloTestButton.addEventListener("click", async () => {
+      setHaloBusy(true);
+      try {
+        const channel = await apiClient.testHaloConnection();
+        mergeHaloChannel(channel);
+        updateHaloDialog();
+        renderRoute();
+        showShellToast("Halo Console API 连接成功。");
+      } catch (error) {
+        try {
+          mergeHaloChannel(await apiClient.getHaloStatus());
+        } catch {}
+        updateHaloDialog();
+        renderRoute();
+        showShellToast(error.message);
+      } finally {
+        setHaloBusy(false);
+        updateHaloDialog();
+      }
+    });
+    refs.haloClearButton.addEventListener("click", async () => {
+      if (
+        !globalScope.confirm(
+          "确认清除 Halo PAT？清除后真实发布任务将被阻止。"
+        )
+      ) {
+        return;
+      }
+      setHaloBusy(true);
+      try {
+        const channel = await apiClient.clearHaloCredential();
+        mergeHaloChannel(channel);
+        updateHaloDialog();
+        renderRoute();
+        showShellToast("Halo 凭据已清除。");
+      } catch (error) {
+        showShellToast(error.message);
+      } finally {
+        setHaloBusy(false);
+        updateHaloDialog();
+      }
+    });
 
     refs.productMenuToggle.addEventListener("click", () => {
       const willOpen = refs.productMenu.hidden;
@@ -1419,9 +1729,16 @@
           article,
           ...state.remoteArticles.filter((item) => item.id !== article.id),
         ];
+        const publishChannel =
+          state.remoteChannels.find(
+            (channel) =>
+              channel.platformId === "halo" &&
+              channel.publisherMode === "halo" &&
+              channel.connectionStatus === "connected"
+          ) || state.remoteChannels[0];
         const remoteBatch = await apiClient.createPublishBatch({
           articleId: article.id,
-          channelIds: [state.remoteChannels[0].id],
+          channelIds: [publishChannel.id],
           strategy: batch.strategy || "automatic_first",
           postActions: batch.postActions || [],
         });
@@ -1432,7 +1749,11 @@
           ),
         ];
         state.usage.publishBatches += 1;
-        showShellToast("SaaS Dev 发布批次已交给后端 Mock Worker。");
+        showShellToast(
+          publishChannel.platformId === "halo"
+            ? "发布批次已交给服务端 Halo Worker。"
+            : "SaaS Dev 发布批次已交给后端 Mock Worker。"
+        );
         if (state.activeRoute === ROUTES.publishHistory) {
           renderRemotePublishHistory();
         }

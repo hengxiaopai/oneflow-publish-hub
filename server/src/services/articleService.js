@@ -22,6 +22,7 @@ export function articleView(article) {
 export function articleData(input, current = {}) {
   const next = {};
   if ("title" in input) next.title = String(input.title).trim();
+  if ("slug" in input) next.slug = String(input.slug || "").trim();
   if ("summary" in input) next.summary = String(input.summary || "");
   if ("contentHtml" in input) {
     next.contentHtml = sanitizeHtml(String(input.contentHtml || ""));

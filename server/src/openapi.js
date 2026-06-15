@@ -15,9 +15,9 @@ export function createOpenApiDocument(config) {
     openapi: "3.1.0",
     info: {
       title: "OneFlow SaaS API",
-      version: "0.3.0",
+      version: "0.4.0",
       description:
-        "Phase 5 API with password authentication, persistent cookie sessions, workspace tenancy, RBAC, and development-only dev sessions.",
+        "Phase 6 API with SaaS authentication, workspace tenancy, RBAC, encrypted channel credentials, and server-side Halo publishing.",
     },
     servers: [{ url: `http://${config.host}:${config.port}` }],
     tags: [
@@ -52,6 +52,10 @@ export function createOpenApiDocument(config) {
       },
       "/api/channels/{id}": { put: { tags: ["Channels"], responses: { 200: { description: "Channel updated" } } } },
       "/api/channels/{id}/test": { post: { tags: ["Channels"], responses: { 200: { description: "Connection tested" } } } },
+      "/api/channels/halo/status": { get: { tags: ["Channels"], responses: { 200: { description: "Halo connection status without credential material" } } } },
+      "/api/channels/halo/connect": { post: { tags: ["Channels"], responses: { 201: { description: "Halo connection saved with an encrypted PAT" } } } },
+      "/api/channels/halo/test": { post: { tags: ["Channels"], responses: { 200: { description: "Halo Console API connection tested by the backend" } } } },
+      "/api/channels/halo/clear-credential": { post: { tags: ["Channels"], responses: { 200: { description: "Stored Halo credential removed" } } } },
       "/api/publish-batches": {
         get: { tags: ["Publish"], responses: { 200: { description: "Batch list" } } },
         post: { tags: ["Publish"], responses: { 202: { description: "Batch accepted" } } },

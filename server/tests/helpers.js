@@ -1,6 +1,6 @@
 import { buildApp } from "../src/index.js";
 
-export async function createTestApp(config = {}) {
+export async function createTestApp(config = {}, options = {}) {
   return buildApp({
     config: {
       nodeEnv: "test",
@@ -18,6 +18,7 @@ export async function createTestApp(config = {}) {
       ...config,
     },
     logger: false,
+    ...options,
   });
 }
 
@@ -26,6 +27,7 @@ export async function resetDatabase(app) {
   await prisma.session.deleteMany();
   await prisma.authIdentity.deleteMany();
   await prisma.publishTask.deleteMany();
+  await prisma.validationIssue?.deleteMany?.();
   await prisma.publishBatch.deleteMany();
   await prisma.channelVersion.deleteMany();
   await prisma.channelConfig.deleteMany();

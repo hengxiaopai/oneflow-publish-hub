@@ -167,6 +167,11 @@ test("HTML declares every SaaS route surface and loads shell scripts after the w
   assert.match(html, /id="auth-mode-register"/);
   assert.match(html, /id="enter-saas-dev-mode"/);
   assert.match(html, /id="product-menu"/);
+  assert.match(html, /id="halo-connection-dialog"/);
+  assert.match(html, /id="halo-connection-form"/);
+  assert.match(html, /id="halo-pat-token"/);
+  assert.match(html, /id="test-halo-connection"/);
+  assert.match(html, /id="clear-halo-credential"/);
   assert.match(html, /href="#\/dashboard"/);
   assert.match(html, /href="#\/workbench"/);
   assert.match(html, /src="entitlements\.js\?v=1"/);

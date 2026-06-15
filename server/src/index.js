@@ -17,6 +17,7 @@ import { authRoutes } from "./routes/auth.js";
 import { articleRoutes } from "./routes/articles.js";
 import { workspaceRoutes } from "./routes/workspaces.js";
 import { channelRoutes } from "./routes/channels.js";
+import { haloChannelRoutes } from "./routes/haloChannels.js";
 import { publishRoutes } from "./routes/publish.js";
 import { usageRoutes } from "./routes/usage.js";
 import { aiCapabilityRoutes } from "./routes/aiCapabilities.js";
@@ -24,6 +25,9 @@ import { createSessionService } from "./services/sessionService.js";
 import { createAuthService } from "./services/authService.js";
 import { createMockPublisherService } from "./services/mockPublisherService.js";
 import { createPublishService } from "./services/publishService.js";
+import { createHaloPublisherService } from "./services/publishers/haloPublisherService.js";
+import { createHaloPublishWorkerService } from "./services/haloPublishWorkerService.js";
+import { createPublisherRouterService } from "./services/publisherRouterService.js";
 
 export async function buildApp(options = {}) {
   const config = loadConfig(options.config);
@@ -47,13 +51,28 @@ export async function buildApp(options = {}) {
   });
   const authService = createAuthService(prisma, sessionService);
   const mockPublisher = createMockPublisherService(prisma);
-  const publishService = createPublishService(prisma, mockPublisher);
+  const haloPublisher = createHaloPublisherService({
+    encryptionKey: config.encryptionKey,
+    fetchImpl: options.fetchImpl || globalThis.fetch,
+    timeoutMs: options.haloTimeoutMs || 15000,
+  });
+  const haloPublisherWorker = createHaloPublishWorkerService(
+    prisma,
+    haloPublisher,
+  );
+  const publisherRouter = createPublisherRouterService(prisma, {
+    mockPublisher,
+    haloPublisherWorker,
+  });
+  const publishService = createPublishService(prisma, publisherRouter);
 
   app.decorate("config", config);
   app.decorate("prisma", prisma);
   app.decorate("sessionService", sessionService);
   app.decorate("authService", authService);
   app.decorate("mockPublisher", mockPublisher);
+  app.decorate("haloPublisher", haloPublisher);
+  app.decorate("publisherRouter", publisherRouter);
   app.decorate("publishService", publishService);
   app.decorate("authenticate", createAuthMiddleware(sessionService, config));
   app.decorate("requireEditor", createRoleGuard("editor"));
@@ -74,6 +93,7 @@ export async function buildApp(options = {}) {
       await api.register(workspaceRoutes);
       await api.register(articleRoutes);
       await api.register(channelRoutes);
+      await api.register(haloChannelRoutes);
       await api.register(publishRoutes);
       await api.register(usageRoutes);
       await api.register(aiCapabilityRoutes);

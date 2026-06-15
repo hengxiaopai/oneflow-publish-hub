@@ -58,7 +58,6 @@ for (const testFile of testFiles) {
     {
       cwd,
       env,
-      shell: process.platform === "win32",
       stdio: "inherit",
     },
   );

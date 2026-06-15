@@ -8,6 +8,7 @@
   },
   "scripts": {
     "dev": "node --watch src/index.js",
+    "dev:fake-halo": "node scripts/fake-halo-server.js",
     "start": "node src/index.js",
     "test": "node scripts/run-tests.js",
     "prisma:generate": "prisma generate",

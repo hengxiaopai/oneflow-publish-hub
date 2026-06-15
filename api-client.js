@@ -115,6 +115,7 @@
     function mapArticle(article = {}) {
       return {
         title: article.title || "",
+        slug: article.slug || "",
         summary: article.summary || "",
         contentHtml: article.bodyHtml || article.contentHtml || "",
         contentMarkdown:
@@ -187,6 +188,21 @@
           method: remoteId ? "PUT" : "POST",
           body: channel,
         });
+      },
+      async getHaloStatus() {
+        return request("/channels/halo/status", { method: "GET" });
+      },
+      async connectHaloChannel(configuration) {
+        return request("/channels/halo/connect", {
+          method: "POST",
+          body: configuration,
+        });
+      },
+      async testHaloConnection() {
+        return request("/channels/halo/test", { method: "POST" });
+      },
+      async clearHaloCredential() {
+        return request("/channels/halo/clear-credential", { method: "POST" });
       },
       async createPublishBatch(batch) {
         return request("/publish-batches", {
