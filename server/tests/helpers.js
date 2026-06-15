@@ -1,14 +1,21 @@
 import { buildApp } from "../src/index.js";
 
-export async function createTestApp() {
+export async function createTestApp(config = {}) {
   return buildApp({
     config: {
+      nodeEnv: "test",
+      port: 4174,
       databaseUrl: process.env.DATABASE_URL || "file:./test.db",
       encryptionKey:
         process.env.ENCRYPTION_KEY ||
         "oneflow-test-encryption-key-not-for-production",
-      corsOrigin: "http://127.0.0.1:4173",
+      sessionSecret: "oneflow-test-session-secret-not-for-production",
+      corsOrigin: ["http://127.0.0.1:4173"],
+      bodyLimit: 3 * 1024 * 1024,
+      devSessionRateLimitMax: 20,
+      publishRateLimitMax: 30,
       isTest: true,
+      ...config,
     },
     logger: false,
   });

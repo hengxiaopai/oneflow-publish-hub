@@ -9,9 +9,7 @@ import {
 } from "../services/entitlementService.js";
 
 function errorResponse(request, reply, statusCode, code, message) {
-  return reply.code(statusCode).send({
-    error: { code, message, requestId: request.id },
-  });
+  return reply.failure(statusCode, code, message);
 }
 
 export async function publishRoutes(app) {
@@ -39,6 +37,12 @@ export async function publishRoutes(app) {
               items: { type: "string", maxLength: 80 },
             },
           },
+        },
+      },
+      config: {
+        rateLimit: {
+          max: app.config.publishRateLimitMax,
+          timeWindow: "1 minute",
         },
       },
     },
@@ -82,20 +86,20 @@ export async function publishRoutes(app) {
           "文章或渠道不存在。",
         );
       }
-      return reply.code(202).send({ data: batchView(result.batch) });
+      return reply.code(202).success(batchView(result.batch));
     },
   );
 
   app.get(
     "/publish-batches",
     { preHandler: app.authenticate },
-    async (request) => {
+    async (request, reply) => {
       const batches = await app.prisma.publishBatch.findMany({
         where: { workspaceId: request.auth.workspaceId },
         include: { tasks: { orderBy: { createdAt: "asc" } } },
         orderBy: { createdAt: "desc" },
       });
-      return { data: batches.map(batchView) };
+      return reply.success(batches.map(batchView));
     },
   );
 
@@ -108,7 +112,7 @@ export async function publishRoutes(app) {
         request.params.id,
       );
       return batch
-        ? { data: batchView(batch) }
+        ? reply.success(batchView(batch))
         : errorResponse(
             request,
             reply,
@@ -121,7 +125,15 @@ export async function publishRoutes(app) {
 
   app.post(
     "/publish-tasks/:id/retry",
-    { preHandler: app.authenticate },
+    {
+      preHandler: app.authenticate,
+      config: {
+        rateLimit: {
+          max: app.config.publishRateLimitMax,
+          timeWindow: "1 minute",
+        },
+      },
+    },
     async (request, reply) => {
       const result = await app.publishService.retryTask(
         request.auth.workspaceId,
@@ -145,7 +157,7 @@ export async function publishRoutes(app) {
           "当前任务不可重试。",
         );
       }
-      return reply.code(202).send({ data: taskView(result.task) });
+      return reply.code(202).success(taskView(result.task));
     },
   );
 }

@@ -31,21 +31,25 @@ export async function authRoutes(app) {
           },
         },
       },
+      config: {
+        rateLimit: {
+          max: app.config.devSessionRateLimitMax,
+          timeWindow: "1 minute",
+        },
+      },
     },
     async (request, reply) => {
       const context = await app.sessionService.start(
         request.body?.profileKey || "default",
       );
-      return reply.code(201).send({
-        data: authContext(context, context.token),
-      });
+      return reply.code(201).success(authContext(context, context.token));
     },
   );
 
   app.get(
     "/auth/me",
     { preHandler: app.authenticate },
-    async (request) => {
+    async (request, reply) => {
       const membership = await app.prisma.workspaceMember.findUnique({
         where: {
           workspaceId_userId: {
@@ -60,8 +64,8 @@ export async function authRoutes(app) {
           },
         },
       });
-      return {
-        data: authContext(
+      return reply.success(
+        authContext(
           {
             user: membership.user,
             workspace: membership.workspace,
@@ -70,7 +74,7 @@ export async function authRoutes(app) {
           },
           undefined,
         ),
-      };
+      );
     },
   );
 
@@ -79,7 +83,7 @@ export async function authRoutes(app) {
     { preHandler: app.authenticate },
     async (request, reply) => {
       app.sessionService.destroy(request.headers["x-oneflow-dev-session"]);
-      return reply.code(204).send();
+      return reply.success(null);
     },
   );
 }

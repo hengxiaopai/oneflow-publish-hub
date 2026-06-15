@@ -12,15 +12,14 @@ function quota(used, limit) {
 }
 
 export async function usageRoutes(app) {
-  app.get("/usage", { preHandler: app.authenticate }, async (request) => {
+  app.get("/usage", { preHandler: app.authenticate }, async (request, reply) => {
     const context = await getWorkspaceEntitlementContext(
       app.prisma,
       request.auth.workspaceId,
     );
     const limits = PLAN_LIMITS[context.planId];
 
-    return {
-      data: {
+    return reply.success({
         planId: context.planId,
         period: context.period,
         articles: quota(context.usage.articles, limits.articles),
@@ -41,7 +40,6 @@ export async function usageRoutes(app) {
           imageHost: limits.imageHost,
           scheduledPublishing: limits.scheduledPublishing,
         },
-      },
-    };
+    });
   });
 }

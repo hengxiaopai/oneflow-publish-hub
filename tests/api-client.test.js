@@ -28,11 +28,19 @@ test("dev session token is stored in sessionStorage and sent as a header", async
       requests.push({ url, options });
       if (url.endsWith("/dev/session")) {
         return new Response(
-          JSON.stringify({ data: { sessionToken: "dev-session-token" } }),
+          JSON.stringify({
+            ok: true,
+            data: { sessionToken: "dev-session-token" },
+            meta: {},
+          }),
           { status: 201, headers: { "content-type": "application/json" } }
         );
       }
-      return new Response(JSON.stringify({ data: { user: { id: "usr" } } }), {
+      return new Response(JSON.stringify({
+        ok: true,
+        data: { user: { id: "usr" } },
+        meta: {},
+      }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -55,7 +63,11 @@ test("saveArticle maps the local article and chooses create or update", async ()
     sessionStorage: createStorage(),
     fetchImpl: async (url, options) => {
       requests.push({ url, options });
-      return new Response(JSON.stringify({ data: { id: "article-remote" } }), {
+      return new Response(JSON.stringify({
+        ok: true,
+        data: { id: "article-remote" },
+        meta: {},
+      }), {
         status: options.method === "POST" ? 201 : 200,
         headers: { "content-type": "application/json" },
       });
@@ -89,7 +101,7 @@ test("API methods expose the Phase 4 endpoints", async () => {
     sessionStorage: createStorage(),
     fetchImpl: async (url, options) => {
       calls.push([url, options.method]);
-      return new Response(JSON.stringify({ data: [] }), {
+      return new Response(JSON.stringify({ ok: true, data: [], meta: {} }), {
         status: 200,
         headers: { "content-type": "application/json" },
       });
@@ -113,6 +125,78 @@ test("API methods expose the Phase 4 endpoints", async () => {
       ["/api/publish-batches", "GET"],
       ["/api/usage", "GET"],
     ]
+  );
+});
+
+test("API errors use the shared error envelope", async () => {
+  const client = createApiClient({
+    sessionStorage: createStorage(),
+    fetchImpl: async () =>
+      new Response(
+        JSON.stringify({
+          ok: false,
+          error: {
+            code: "ARTICLE_LIMIT_REACHED",
+            message: "文章额度已用完。",
+            details: { limit: 20 },
+          },
+        }),
+        {
+          status: 403,
+          headers: { "content-type": "application/json" },
+        }
+      ),
+  });
+
+  await assert.rejects(
+    () => client.listArticles(),
+    (error) =>
+      error.code === "ARTICLE_LIMIT_REACHED" &&
+      error.status === 403 &&
+      error.details.limit === 20
+  );
+});
+
+test("request timeout is distinct from backend unavailability", async () => {
+  const client = createApiClient({
+    sessionStorage: createStorage(),
+    timeoutMs: 10,
+    fetchImpl: async (_url, options) =>
+      new Promise((_resolve, reject) => {
+        options.signal.addEventListener("abort", () => {
+          const error = new Error("aborted");
+          error.name = "AbortError";
+          reject(error);
+        });
+      }),
+  });
+
+  await assert.rejects(
+    () => client.getUsage(),
+    (error) =>
+      error.code === "REQUEST_TIMEOUT" &&
+      error.backendUnavailable === false
+  );
+});
+
+test("connection subscribers receive connecting and connected states", async () => {
+  const states = [];
+  const client = createApiClient({
+    sessionStorage: createStorage(),
+    fetchImpl: async () =>
+      new Response(JSON.stringify({ ok: true, data: {}, meta: {} }), {
+        status: 200,
+        headers: { "content-type": "application/json" },
+      }),
+  });
+  const unsubscribe = client.subscribeConnection((state) => states.push(state));
+
+  await client.getUsage();
+  unsubscribe();
+
+  assert.deepEqual(
+    states.map((state) => state.status),
+    ["connecting", "connected"]
   );
 });
 

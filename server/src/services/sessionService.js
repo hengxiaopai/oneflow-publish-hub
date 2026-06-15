@@ -1,4 +1,4 @@
-import { createHash, randomBytes } from "node:crypto";
+import { createHmac, createHash, randomBytes } from "node:crypto";
 
 const CAPABILITIES = [
   ["title_generation", "标题生成", "free"],
@@ -17,8 +17,10 @@ function profileSlug(profileKey) {
   return createHash("sha256").update(profileKey).digest("hex").slice(0, 12);
 }
 
-export function createSessionService(prisma) {
+export function createSessionService(prisma, sessionSecret) {
   const sessions = new Map();
+  const sessionKey = (token) =>
+    createHmac("sha256", sessionSecret).update(token).digest("hex");
 
   async function ensureProfile(profileKey = "default") {
     const normalizedKey = String(profileKey || "default").trim().slice(0, 80);
@@ -105,7 +107,7 @@ export function createSessionService(prisma) {
   async function start(profileKey) {
     const context = await ensureProfile(profileKey);
     const token = randomBytes(32).toString("base64url");
-    sessions.set(token, {
+    sessions.set(sessionKey(token), {
       userId: context.user.id,
       workspaceId: context.workspace.id,
       role: context.membership.role,
@@ -115,11 +117,11 @@ export function createSessionService(prisma) {
   }
 
   function get(token) {
-    return token ? sessions.get(token) || null : null;
+    return token ? sessions.get(sessionKey(token)) || null : null;
   }
 
   function destroy(token) {
-    if (token) sessions.delete(token);
+    if (token) sessions.delete(sessionKey(token));
   }
 
   function clear() {

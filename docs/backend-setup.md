@@ -18,20 +18,16 @@ Mock Publisher Worker。它不是生产认证或真实平台发布服务。
 ## 初始化
 
 ```powershell
-cd server
 Copy-Item .env.example .env
-npm install
-npx prisma generate
-npx prisma db push
+npm --prefix server install
+npm run db:generate
+npm run db:migrate
+npm run db:seed
 npm run dev
 ```
 
-另开终端启动前端：
-
-```powershell
-cd ..
-python -m http.server 4173
-```
+`npm run dev` 同时启动前端与后端。也可分别使用 `npm run dev:frontend` 和
+`npm run dev:server`。
 
 打开 `http://127.0.0.1:4173/#/login`，选择：
 
@@ -45,26 +41,52 @@ PORT=4174
 HOST=127.0.0.1
 DATABASE_URL=file:./dev.db
 ENCRYPTION_KEY=replace-with-a-long-random-local-key
+SESSION_SECRET=replace-with-a-different-long-random-session-secret
 CORS_ORIGIN=http://127.0.0.1:4173
+BODY_LIMIT=3145728
+DEV_SESSION_RATE_LIMIT_MAX=20
+PUBLISH_RATE_LIMIT_MAX=30
 ```
 
-`.env` 不提交到 Git。`server/.env.example` 只包含占位值。
+服务启动时会校验环境变量。`ENCRYPTION_KEY` 和 `SESSION_SECRET` 少于 32 字符会直接
+停止；生产环境的 `CORS_ORIGIN` 禁止 `*`。`.env` 不提交到 Git，
+`server/.env.example` 只包含占位值。
 
 ## SQLite 位置
 
-默认运行时数据库位于 `server/dev.db`。测试数据库为 `server/test.db`，测试前会
-重置；两者均被 `.gitignore` 排除。
+默认运行时数据库位于 `server/dev.db`。后端测试为每个测试文件创建独立的临时
+SQLite 数据库，测试后删除；这些文件均被 `.gitignore` 排除。
+
+Seed 可重复执行，固定开发记录使用 upsert，不会生成重复用户、工作区、订阅、文章、
+渠道或 AI 能力。
 
 ## 测试
 
 ```powershell
-cd server
 npm test
-npx prisma validate
+npm run check
+npm run security:scan
 ```
 
 测试运行器会逐文件执行 Node 测试，避免 Windows 下 libSQL 多测试文件共享进程时的
 原生资源退出问题。
+
+## Docker
+
+```powershell
+Copy-Item .env.example .env
+docker compose up --build
+npm run dev:frontend
+```
+
+Compose 启动后端与持久化 SQLite volume。完整边界见
+[Deployment Notes](deployment-notes.md)。
+
+## API 文档
+
+- `GET http://127.0.0.1:4174/api/health`
+- `GET http://127.0.0.1:4174/api/openapi.json`
+- [统一错误格式](api-error-format.md)
 
 ## 当前限制
 

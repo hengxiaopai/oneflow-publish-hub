@@ -64,7 +64,9 @@ test("logout invalidates the local development session", async () => {
     url: "/api/auth/logout",
     headers: session.headers,
   });
-  assert.equal(logout.statusCode, 204);
+  assert.equal(logout.statusCode, 200);
+  assert.equal(logout.json().ok, true);
+  assert.equal(logout.json().data, null);
 
   const me = await app.inject({
     method: "GET",

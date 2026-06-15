@@ -3,8 +3,10 @@
 (function exposeApiClient(globalScope) {
   const SESSION_KEY = "oneflow.dev.session";
   const DEFAULT_BASE_URL = "http://127.0.0.1:4174/api";
+  const DEFAULT_TIMEOUT_MS = 10000;
   const BACKEND_UNAVAILABLE_MESSAGE =
     "后端服务未启动，可切换到本地开发模式。";
+  const REQUEST_TIMEOUT_MESSAGE = "后端请求超时，请检查服务状态后重试。";
 
   function createApiClient(options = {}) {
     const baseUrl = String(options.baseUrl || DEFAULT_BASE_URL).replace(
@@ -13,12 +15,31 @@
     );
     const fetchImpl = options.fetchImpl || globalScope.fetch?.bind(globalScope);
     const storage = options.sessionStorage || globalScope.sessionStorage;
+    const timeoutMs = Number(options.timeoutMs || DEFAULT_TIMEOUT_MS);
+    const connectionSubscribers = new Set();
+    let connectionState = {
+      status: "idle",
+      checkedAt: null,
+      error: null,
+    };
+
+    function updateConnection(status, error = null) {
+      connectionState = {
+        status,
+        checkedAt: new Date().toISOString(),
+        error,
+      };
+      connectionSubscribers.forEach((listener) =>
+        listener({ ...connectionState })
+      );
+    }
 
     async function request(path, requestOptions = {}) {
       if (typeof fetchImpl !== "function") {
         const error = new Error(BACKEND_UNAVAILABLE_MESSAGE);
         error.code = "BACKEND_UNAVAILABLE";
         error.backendUnavailable = true;
+        updateConnection("unavailable", error.message);
         throw error;
       }
 
@@ -31,7 +52,13 @@
         headers["x-oneflow-dev-session"] = sessionToken;
       }
 
+      const controller = new AbortController();
+      const timeout = globalScope.setTimeout(
+        () => controller.abort(),
+        timeoutMs
+      );
       let response;
+      updateConnection("connecting");
       try {
         response = await fetchImpl(`${baseUrl}${path}`, {
           ...requestOptions,
@@ -41,24 +68,45 @@
             typeof requestOptions.body !== "string"
               ? JSON.stringify(requestOptions.body)
               : requestOptions.body,
+          signal: controller.signal,
         });
       } catch (cause) {
+        globalScope.clearTimeout(timeout);
+        if (cause?.name === "AbortError") {
+          const error = new Error(REQUEST_TIMEOUT_MESSAGE, { cause });
+          error.code = "REQUEST_TIMEOUT";
+          error.backendUnavailable = false;
+          updateConnection("unavailable", error.message);
+          throw error;
+        }
         const error = new Error(BACKEND_UNAVAILABLE_MESSAGE, { cause });
         error.code = "BACKEND_UNAVAILABLE";
         error.backendUnavailable = true;
+        updateConnection("unavailable", error.message);
         throw error;
       }
+      globalScope.clearTimeout(timeout);
 
       const payload = await response.json().catch(() => ({}));
-      if (!response.ok) {
+      if (!response.ok || payload?.ok === false) {
         const error = new Error(
           payload?.error?.message || `API request failed (${response.status})`,
         );
         error.code = payload?.error?.code || "API_REQUEST_FAILED";
         error.status = response.status;
         error.details = payload?.error?.details;
+        updateConnection("connected");
         throw error;
       }
+      if (payload?.ok !== true || !Object.hasOwn(payload, "data")) {
+        const error = new Error("后端响应格式无效。");
+        error.code = "API_PROTOCOL_ERROR";
+        error.status = response.status;
+        error.backendUnavailable = false;
+        updateConnection("connected");
+        throw error;
+      }
+      updateConnection("connected");
       return payload.data;
     }
 
@@ -76,6 +124,14 @@
     }
 
     return {
+      getConnectionState() {
+        return { ...connectionState };
+      },
+      subscribeConnection(listener) {
+        if (typeof listener !== "function") return () => {};
+        connectionSubscribers.add(listener);
+        return () => connectionSubscribers.delete(listener);
+      },
       async startDevSession(profileKey = "default") {
         const data = await request("/dev/session", {
           method: "POST",
@@ -138,6 +194,8 @@
   const api = {
     BACKEND_UNAVAILABLE_MESSAGE,
     DEFAULT_BASE_URL,
+    DEFAULT_TIMEOUT_MS,
+    REQUEST_TIMEOUT_MESSAGE,
     SESSION_KEY,
     createApiClient,
   };

@@ -13,10 +13,14 @@
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:push": "prisma db push",
-    "prisma:migrate": "prisma migrate dev --name init"
+    "prisma:migrate": "prisma migrate dev",
+    "prisma:seed": "prisma db seed",
+    "prisma:reset": "prisma migrate reset --force && prisma db seed"
   },
   "dependencies": {
     "@fastify/cors": "11.2.0",
+    "@fastify/helmet": "13.0.2",
+    "@fastify/rate-limit": "11.0.0",
     "@prisma/adapter-libsql": "7.8.0",
     "@prisma/client": "7.8.0",
     "dotenv": "17.4.2",

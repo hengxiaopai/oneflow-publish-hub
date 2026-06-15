@@ -1,0 +1,43 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_ENV: test
+      DATABASE_URL: file:./ci.db
+      ENCRYPTION_KEY: oneflow-ci-encryption-key-not-for-production
+      SESSION_SECRET: oneflow-ci-session-secret-not-for-production
+      CORS_ORIGIN: http://127.0.0.1:4173
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: server/package-lock.json
+
+      - name: Install backend dependencies
+        run: npm --prefix server ci
+
+      - name: Frontend tests
+        run: npm run test:frontend
+
+      - name: Backend tests
+        run: npm run test:server
+
+      - name: Syntax and Prisma checks
+        run: npm run check
+
+      - name: Sensitive information scan
+        run: npm run security:scan

@@ -12,13 +12,13 @@ export async function workspaceRoutes(app) {
   app.get(
     "/workspaces",
     { preHandler: app.authenticate },
-    async (request) => {
+    async (request, reply) => {
       const memberships = await app.prisma.workspaceMember.findMany({
         where: { userId: request.auth.userId },
         include: { workspace: true },
         orderBy: { createdAt: "asc" },
       });
-      return { data: memberships.map(workspaceView) };
+      return reply.success(memberships.map(workspaceView));
     },
   );
 
@@ -36,15 +36,9 @@ export async function workspaceRoutes(app) {
         include: { workspace: true },
       });
       if (!membership) {
-        return reply.code(404).send({
-          error: {
-            code: "NOT_FOUND",
-            message: "当前工作区不存在。",
-            requestId: request.id,
-          },
-        });
+        return reply.failure(404, "NOT_FOUND", "当前工作区不存在。");
       }
-      return { data: workspaceView(membership) };
+      return reply.success(workspaceView(membership));
     },
   );
 }

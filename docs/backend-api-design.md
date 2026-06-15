@@ -39,6 +39,7 @@ Base path：`/api`
 
 ```json
 {
+  "ok": true,
   "data": {},
   "meta": {
     "requestId": "req_01"
@@ -50,13 +51,14 @@ Base path：`/api`
 
 ```json
 {
+  "ok": false,
   "error": {
     "code": "PLAN_UPGRADE_REQUIRED",
     "message": "当前套餐不支持定时发布。",
     "details": {
-      "requiredPlan": "pro"
-    },
-    "requestId": "req_01"
+      "requiredPlan": "pro",
+      "requestId": "req_01"
+    }
   }
 }
 ```
@@ -67,7 +69,7 @@ Base path：`/api`
 UNAUTHENTICATED
 FORBIDDEN
 WORKSPACE_NOT_FOUND
-VALIDATION_FAILED
+VALIDATION_ERROR
 CONFLICT
 RATE_LIMITED
 PLAN_UPGRADE_REQUIRED
@@ -105,7 +107,7 @@ INTERNAL_ERROR
 
 ### POST /api/auth/logout
 
-请求：无正文。响应：`204 No Content`。
+请求：无正文。响应：`200`，`data: null`。
 
 权限：已登录。套餐校验：否。服务端撤销当前 Session。
 
@@ -226,7 +228,7 @@ search=...
 
 请求：可选 `{ "expectedVersion": 12 }`。
 
-响应：`204 No Content`。
+响应：`200`，`data: null`。
 
 权限：`editor+`；永久删除可要求 `admin+`。套餐校验：否。
 

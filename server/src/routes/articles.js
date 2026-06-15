@@ -19,25 +19,19 @@ const articleProperties = {
 };
 
 function notFound(request, reply) {
-  return reply.code(404).send({
-    error: {
-      code: "NOT_FOUND",
-      message: "文章不存在。",
-      requestId: request.id,
-    },
-  });
+  return reply.failure(404, "NOT_FOUND", "文章不存在。");
 }
 
 export async function articleRoutes(app) {
   app.get(
     "/articles",
     { preHandler: app.authenticate },
-    async (request) => {
+    async (request, reply) => {
       const articles = await app.prisma.article.findMany({
         where: { workspaceId: request.auth.workspaceId },
         orderBy: { updatedAt: "desc" },
       });
-      return { data: articles.map(articleView) };
+      return reply.success(articles.map(articleView));
     },
   );
 
@@ -61,13 +55,11 @@ export async function articleRoutes(app) {
       );
       const decision = canCreateArticle(context);
       if (!decision.allowed) {
-        return reply.code(403).send({
-          error: {
-            code: decision.reason,
-            message: "当前套餐的文章数量额度已用完。",
-            requestId: request.id,
-          },
-        });
+        return reply.failure(
+          403,
+          decision.reason,
+          "当前套餐的文章数量额度已用完。",
+        );
       }
       const article = await app.prisma.article.create({
         data: {
@@ -75,7 +67,7 @@ export async function articleRoutes(app) {
           ...articleData(request.body),
         },
       });
-      return reply.code(201).send({ data: articleView(article) });
+      return reply.code(201).success(articleView(article));
     },
   );
 
@@ -89,7 +81,9 @@ export async function articleRoutes(app) {
           workspaceId: request.auth.workspaceId,
         },
       });
-      return article ? { data: articleView(article) } : notFound(request, reply);
+      return article
+        ? reply.success(articleView(article))
+        : notFound(request, reply);
     },
   );
 
@@ -118,7 +112,7 @@ export async function articleRoutes(app) {
         where: { id: existing.id },
         data: articleData(request.body, existing),
       });
-      return { data: articleView(article) };
+      return reply.success(articleView(article));
     },
   );
 
@@ -134,7 +128,7 @@ export async function articleRoutes(app) {
       });
       if (!existing) return notFound(request, reply);
       await app.prisma.article.delete({ where: { id: existing.id } });
-      return reply.code(204).send();
+      return reply.success(null);
     },
   );
 }

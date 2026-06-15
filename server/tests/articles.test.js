@@ -71,7 +71,9 @@ test("Article API supports workspace-scoped CRUD and structured fields", async (
     url: `/api/articles/${article.id}`,
     headers: session.headers,
   });
-  assert.equal(removed.statusCode, 204);
+  assert.equal(removed.statusCode, 200);
+  assert.equal(removed.json().ok, true);
+  assert.equal(removed.json().data, null);
 });
 
 test("Article lookup does not reveal another workspace resource", async () => {

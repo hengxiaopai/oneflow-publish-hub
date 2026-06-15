@@ -1,0 +1,31 @@
+services:
+  server:
+    build:
+      context: ./server
+      dockerfile: Dockerfile
+    environment:
+      NODE_ENV: ${NODE_ENV:-development}
+      PORT: ${PORT:-4174}
+      HOST: 0.0.0.0
+      DATABASE_URL: ${DATABASE_URL:-file:/app/data/oneflow.db}
+      ENCRYPTION_KEY: ${ENCRYPTION_KEY:-replace-with-a-random-encryption-key-at-least-32-characters}
+      SESSION_SECRET: ${SESSION_SECRET:-replace-with-a-different-session-secret-at-least-32-characters}
+      CORS_ORIGIN: ${CORS_ORIGIN:-http://127.0.0.1:4173,http://localhost:4173}
+    ports:
+      - "4174:4174"
+    volumes:
+      - oneflow-sqlite:/app/data
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "node",
+          "-e",
+          "fetch('http://127.0.0.1:4174/api/health').then(r=>{if(!r.ok)process.exit(1)}).catch(()=>process.exit(1))"
+        ]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+volumes:
+  oneflow-sqlite:

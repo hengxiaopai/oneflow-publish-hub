@@ -1,0 +1,23 @@
+{
+  "name": "oneflow-publish-hub",
+  "version": "0.4.1",
+  "private": true,
+  "engines": {
+    "node": ">=22.11.0"
+  },
+  "scripts": {
+    "dev": "node scripts/dev.mjs",
+    "dev:frontend": "node scripts/static-server.mjs",
+    "dev:server": "npm --prefix server run dev",
+    "test": "npm run test:frontend && npm run test:server",
+    "test:frontend": "node --test tests/*.test.js",
+    "test:server": "npm --prefix server test",
+    "lint": "npm run check",
+    "check": "node scripts/check.mjs && npm --prefix server run prisma:validate",
+    "security:scan": "node scripts/scan-sensitive.mjs",
+    "db:generate": "npm --prefix server run prisma:generate",
+    "db:migrate": "npm --prefix server run prisma:migrate",
+    "db:seed": "npm --prefix server run prisma:seed",
+    "db:reset": "npm --prefix server run prisma:reset"
+  }
+}

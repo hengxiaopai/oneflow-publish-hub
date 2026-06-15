@@ -772,6 +772,7 @@
       articles: document.querySelector("#content-library-view"),
       shellToast: document.querySelector("#shell-toast"),
       profileButton: document.querySelector(".profile-button"),
+      apiConnectionStatus: document.querySelector("#api-connection-status"),
     };
     let state = createSaasState();
     let toastTimer = null;
@@ -827,6 +828,21 @@
         small.textContent = "Free · 演示模式";
         refs.profileButton.setAttribute("aria-label", "当前模式：本地演示");
       }
+    }
+
+    function updateApiConnectionStatus(status = state.backendStatus) {
+      if (!refs.apiConnectionStatus) return;
+      const labels = {
+        idle: "本地演示",
+        connecting: "API 连接中",
+        connected: "API 已连接",
+        unavailable: "API 不可用",
+      };
+      const effectiveStatus =
+        state.sessionMode === "saas_dev" ? status : "idle";
+      refs.apiConnectionStatus.dataset.state = effectiveStatus;
+      refs.apiConnectionStatus.textContent =
+        labels[effectiveStatus] || labels.idle;
     }
 
     function usageFromApi(usage) {
@@ -887,6 +903,7 @@
       await ensureSaasSeedData();
       state.usage.articles = state.remoteArticles.length;
       updateProfileMode();
+      updateApiConnectionStatus("connected");
       return state;
     }
 
@@ -903,6 +920,7 @@
       } catch (error) {
         state = createSaasState();
         globalScope.sessionStorage.removeItem(SESSION_KEY);
+        updateApiConnectionStatus("unavailable");
         setSaasDevStatus(
           error.message || "后端服务未启动，可切换到本地开发模式。",
           "error"
@@ -925,6 +943,7 @@
           state = createSaasState();
           globalScope.sessionStorage.removeItem(SESSION_KEY);
           globalScope.location.hash = ROUTES.login;
+          updateApiConnectionStatus("unavailable");
           setSaasDevStatus(
             error.message || "后端服务未启动，可切换到本地开发模式。",
             "error"
@@ -1069,6 +1088,7 @@
       } else {
         refs.topShell.hidden = false;
         updateProfileMode();
+        updateApiConnectionStatus();
         if (route === ROUTES.workbench) {
           app.openLegacyView("workbench");
         } else if (route === ROUTES.articles) {
@@ -1160,6 +1180,7 @@
           apiClient?.logout().catch(() => {});
         }
         state = createSaasState();
+        updateApiConnectionStatus("idle");
         globalScope.location.hash = ROUTES.login;
         renderRoute();
       }
@@ -1175,6 +1196,14 @@
       });
 
     refs.saasDevButton.addEventListener("click", startSaasDevelopment);
+    apiClient?.subscribeConnection((connection) => {
+      if (state.sessionMode !== "saas_dev") return;
+      state.backendStatus = connection.status;
+      updateApiConnectionStatus(connection.status);
+      if (connection.status === "unavailable" && connection.error) {
+        showShellToast(connection.error);
+      }
+    });
 
     document
       .querySelector("#show-cloud-placeholder")

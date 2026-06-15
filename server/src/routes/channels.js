@@ -25,25 +25,19 @@ const channelProperties = {
 };
 
 function notFound(request, reply) {
-  return reply.code(404).send({
-    error: {
-      code: "NOT_FOUND",
-      message: "渠道连接不存在。",
-      requestId: request.id,
-    },
-  });
+  return reply.failure(404, "NOT_FOUND", "渠道连接不存在。");
 }
 
 export async function channelRoutes(app) {
   app.get(
     "/channels",
     { preHandler: app.authenticate },
-    async (request) => {
+    async (request, reply) => {
       const channels = await app.prisma.channelConfig.findMany({
         where: { workspaceId: request.auth.workspaceId },
         orderBy: { createdAt: "asc" },
       });
-      return { data: channels.map(channelView) };
+      return reply.success(channels.map(channelView));
     },
   );
 
@@ -67,13 +61,11 @@ export async function channelRoutes(app) {
       );
       const decision = canConnectChannel(context);
       if (!decision.allowed) {
-        return reply.code(403).send({
-          error: {
-            code: decision.reason,
-            message: "当前套餐的渠道连接额度已用完。",
-            requestId: request.id,
-          },
-        });
+        return reply.failure(
+          403,
+          decision.reason,
+          "当前套餐的渠道连接额度已用完。",
+        );
       }
       const channel = await app.prisma.channelConfig.create({
         data: {
@@ -81,7 +73,7 @@ export async function channelRoutes(app) {
           ...createChannelData(request.body, app.config.encryptionKey),
         },
       });
-      return reply.code(201).send({ data: channelView(channel) });
+      return reply.code(201).success(channelView(channel));
     },
   );
 
@@ -110,7 +102,7 @@ export async function channelRoutes(app) {
         where: { id: existing.id },
         data: updateChannelData(request.body, app.config.encryptionKey),
       });
-      return { data: channelView(channel) };
+      return reply.success(channelView(channel));
     },
   );
 
@@ -137,7 +129,7 @@ export async function channelRoutes(app) {
           lastVerifiedAt: new Date(),
         },
       });
-      return { data: channelView(channel) };
+      return reply.success(channelView(channel));
     },
   );
 }
