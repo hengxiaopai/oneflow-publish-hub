@@ -11,6 +11,7 @@ const {
   createSaasState,
   enterCloudPlaceholder,
   enterLocalDevelopment,
+  enterSaasDevelopment,
   normalizeHash,
   toggleAICapability,
 } = require("../saas-shell.js");
@@ -48,6 +49,16 @@ test("local development entry is explicit and cloud mode remains a placeholder",
     cloudAuthStatus: "placeholder",
     activeRoute: "#/login",
   });
+});
+
+test("SaaS Dev Mode is explicit and keeps cloud authentication separate", () => {
+  assert.deepEqual(enterSaasDevelopment(createSaasState()), {
+    ...createSaasState(),
+    sessionMode: "saas_dev",
+    cloudAuthStatus: "dev_session",
+    activeRoute: "#/dashboard",
+  });
+  assert.equal(normalizeHash("#/billing", "saas_dev"), "#/billing");
 });
 
 test("dashboard task center derives operational counts from workspace state", () => {
@@ -149,10 +160,12 @@ test("HTML declares every SaaS route surface and loads shell scripts after the w
   requiredIds.forEach((id) => assert.match(html, new RegExp(`id="${id}"`)));
   assert.match(html, /id="enter-local-mode"/);
   assert.match(html, /id="show-cloud-placeholder"/);
+  assert.match(html, /id="enter-saas-dev-mode"/);
   assert.match(html, /id="product-menu"/);
   assert.match(html, /href="#\/dashboard"/);
   assert.match(html, /href="#\/workbench"/);
   assert.match(html, /src="entitlements\.js\?v=1"/);
+  assert.match(html, /src="api-client\.js\?v=1"/);
   assert.match(html, /src="saas-shell\.js\?v=1"/);
   assert.ok(
     html.indexOf('src="app.js?v=') <

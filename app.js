@@ -1423,6 +1423,7 @@ if (typeof document !== "undefined") {
   let pendingImportState = null;
   let storageRecoveryRequired = !restoredSnapshot.ok;
   const stateSubscribers = new Set();
+  const publishBatchSubscribers = new Set();
 
   const queueGroups = document.querySelector("#queue-groups");
   const publishSummary = document.querySelector("#publish-summary");
@@ -2154,6 +2155,12 @@ if (typeof document !== "undefined") {
         postActions: [document.querySelector("#post-action").value],
       });
       productState = result.state;
+      publishBatchSubscribers.forEach((listener) =>
+        listener(
+          cloneProductState(result.batch),
+          cloneProductState(productState)
+        )
+      );
       readyCount.hidden = false;
       renderQueue();
       renderPublishHistory();
@@ -2482,6 +2489,11 @@ if (typeof document !== "undefined") {
       if (typeof listener !== "function") return () => {};
       stateSubscribers.add(listener);
       return () => stateSubscribers.delete(listener);
+    },
+    subscribePublishBatches(listener) {
+      if (typeof listener !== "function") return () => {};
+      publishBatchSubscribers.add(listener);
+      return () => publishBatchSubscribers.delete(listener);
     },
     createNewArticle() {
       productState = updateArticleContent(productState, {

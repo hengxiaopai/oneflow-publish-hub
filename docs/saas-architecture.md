@@ -1,6 +1,6 @@
 # OneFlow SaaS Architecture
 
-更新日期：2026-06-14
+更新日期：2026-06-15
 
 ## 产品定位
 
@@ -30,6 +30,24 @@ Phase 2.5 和 Phase 3S 前端当前提供：
 
 它不提供真实用户认证、租户数据库、支付、云端同步、长期凭据托管、任务队列、
 服务端 AI 调用或正式平台发布。
+
+## Phase 4 可运行后端
+
+Phase 4 在不重写 Vanilla JS 前端的前提下加入：
+
+- Fastify API 和统一错误响应。
+- Prisma schema 与本地 SQLite 数据库。
+- User、Workspace、WorkspaceMember、Article、ChannelConfig、
+  ChannelVersion、PublishBatch、PublishTask、AICapability、UsageRecord 和
+  Subscription。
+- 本地 dev session；它不是生产认证。
+- Workspace 查询隔离和服务端 Entitlement 校验。
+- AES-256-GCM 凭据加密字段，API 不回传凭据。
+- 进程内 Mock Publisher Worker，支持成功、失败和重试。
+- 前端 `api-client.js` 与可选 `SaaS Dev Mode`。
+
+当前实现验证了前后端分离的数据边界，但内存 Session、SQLite 和进程内 Worker
+仍需在生产化阶段替换。
 
 ## 目标架构
 

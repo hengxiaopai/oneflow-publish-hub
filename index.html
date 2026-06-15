@@ -35,11 +35,19 @@
         </div>
         <div class="login-options">
           <article>
-            <span class="mode-label">Local Development</span>
-            <h2>本地开发模式</h2>
+            <span class="mode-label">Local Demo</span>
+            <h2>本地演示模式</h2>
             <p>继续使用浏览器本地工作区，适合产品验证与离线演示。</p>
             <button class="primary-button" id="enter-local-mode" type="button">
               进入本地工作台
+            </button>
+          </article>
+          <article>
+            <span class="mode-label">SaaS Development</span>
+            <h2>SaaS Dev Mode</h2>
+            <p>连接本机 API、SQLite 与后端 Mock Worker，验证前后端分离链路。</p>
+            <button class="secondary-button" id="enter-saas-dev-mode" type="button">
+              连接本地后端
             </button>
           </article>
           <article>
@@ -51,6 +59,7 @@
             </button>
           </article>
         </div>
+        <div class="saas-dev-status" id="saas-dev-status" role="status" hidden></div>
         <div class="cloud-auth-placeholder" id="cloud-auth-placeholder" hidden>
           <strong>云端认证尚未接入</strong>
           <p>当前版本不会收集账号或密码。正式认证将由后端 Session 服务提供。</p>
@@ -653,6 +662,7 @@
     <script src="sanitizer.js?v=3"></script>
     <script src="storage.js?v=3"></script>
     <script src="entitlements.js?v=1"></script>
+    <script src="api-client.js?v=1"></script>
     <script src="app.js?v=3"></script>
     <script src="saas-shell.js?v=1"></script>
   </body>

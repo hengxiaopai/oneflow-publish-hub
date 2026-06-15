@@ -1,6 +1,35 @@
 # Backend API Design
 
-更新日期：2026-06-14
+更新日期：2026-06-15
+
+## Phase 4 实现状态
+
+当前 Fastify 服务已实现：
+
+```text
+POST /api/dev/session
+GET  /api/auth/me
+POST /api/auth/logout
+GET  /api/workspaces
+GET  /api/workspaces/current
+GET  /api/articles
+POST /api/articles
+GET  /api/articles/:id
+PUT  /api/articles/:id
+DELETE /api/articles/:id
+GET  /api/channels
+POST /api/channels
+PUT  /api/channels/:id
+POST /api/channels/:id/test
+POST /api/publish-batches
+GET  /api/publish-batches
+GET  /api/publish-batches/:id
+POST /api/publish-tasks/:id/retry
+GET  /api/usage
+```
+
+Phase 4 使用 `x-oneflow-dev-session` header 承载内存 dev session。下文的正式登录、
+Secure HttpOnly Cookie、分页、幂等键和更细 Role 是生产目标，不应误解为已实现。
 
 ## 通用约定
 
@@ -51,6 +80,12 @@ INTERNAL_ERROR
 
 ## Auth
 
+### POST /api/dev/session
+
+仅本地开发。请求可选 `{ "profileKey": "browser-default" }`，创建或复用本地开发
+用户和默认 Workspace，返回一次 dev session、Free Subscription 和 Workspace。
+不接收账号密码，不属于生产认证。
+
 ### POST /api/auth/login
 
 请求：
@@ -91,6 +126,10 @@ INTERNAL_ERROR
 权限：已登录。套餐校验：否。
 
 ## Workspace
+
+### GET /api/workspaces/current
+
+返回当前 dev session 的 Workspace、Role 和 Subscription 摘要。
 
 ### GET /api/workspaces
 

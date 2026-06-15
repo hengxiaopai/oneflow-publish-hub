@@ -1,0 +1,199 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+}
+
+model User {
+  id            String            @id @default(cuid())
+  devProfileKey String            @unique
+  displayName   String
+  email         String?           @unique
+  createdAt     DateTime          @default(now())
+  updatedAt     DateTime          @updatedAt
+  memberships   WorkspaceMember[]
+}
+
+model Workspace {
+  id               String            @id @default(cuid())
+  name             String
+  slug             String            @unique
+  createdAt        DateTime          @default(now())
+  updatedAt        DateTime          @updatedAt
+  members          WorkspaceMember[]
+  articles         Article[]
+  channels         ChannelConfig[]
+  channelVersions  ChannelVersion[]
+  publishBatches   PublishBatch[]
+  publishTasks     PublishTask[]
+  aiCapabilities   AICapability[]
+  usageRecords     UsageRecord[]
+  subscription     Subscription?
+}
+
+model WorkspaceMember {
+  id          String    @id @default(cuid())
+  workspaceId String
+  userId      String
+  role        String    @default("owner")
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, userId])
+  @@index([userId])
+}
+
+model Article {
+  id              String           @id @default(cuid())
+  workspaceId     String
+  title           String
+  summary         String           @default("")
+  contentHtml     String           @default("")
+  contentMarkdown String           @default("")
+  tags            String           @default("[]")
+  cover           String           @default("{}")
+  status          String           @default("draft")
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+  workspace       Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  channelVersions ChannelVersion[]
+  publishBatches  PublishBatch[]
+
+  @@index([workspaceId, updatedAt])
+}
+
+model ChannelConfig {
+  id                  String           @id @default(cuid())
+  workspaceId         String
+  platformId          String
+  displayName         String
+  channelType         String           @default("article")
+  configuration       String           @default("{}")
+  encryptedCredential String?
+  credentialStatus    String           @default("none")
+  connectionStatus    String           @default("not_connected")
+  mockBehavior        String           @default("success")
+  lastVerifiedAt      DateTime?
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
+  workspace           Workspace        @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  channelVersions     ChannelVersion[]
+  publishTasks        PublishTask[]
+
+  @@unique([workspaceId, platformId, displayName])
+  @@index([workspaceId, connectionStatus])
+}
+
+model ChannelVersion {
+  id              String        @id @default(cuid())
+  workspaceId     String
+  articleId       String
+  channelConfigId String
+  title           String
+  summary         String        @default("")
+  contentHtml     String        @default("")
+  contentMarkdown String        @default("")
+  tags            String        @default("[]")
+  metadata        String        @default("{}")
+  status          String        @default("ready")
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  article         Article       @relation(fields: [articleId], references: [id], onDelete: Cascade)
+  channelConfig   ChannelConfig @relation(fields: [channelConfigId], references: [id], onDelete: Cascade)
+  publishTasks    PublishTask[]
+
+  @@unique([articleId, channelConfigId])
+  @@index([workspaceId, status])
+}
+
+model PublishBatch {
+  id              String        @id @default(cuid())
+  workspaceId     String
+  articleId       String?
+  strategy        String        @default("automatic_first")
+  status          String        @default("pending")
+  scheduleAt      DateTime?
+  postActions     String        @default("[]")
+  articleSnapshot String
+  createdAt       DateTime      @default(now())
+  completedAt     DateTime?
+  workspace       Workspace     @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  article         Article?      @relation(fields: [articleId], references: [id], onDelete: SetNull)
+  tasks           PublishTask[]
+
+  @@index([workspaceId, createdAt])
+}
+
+model PublishTask {
+  id                     String          @id @default(cuid())
+  workspaceId            String
+  publishBatchId         String
+  channelConfigId        String?
+  channelVersionId       String?
+  status                 String          @default("pending")
+  channelVersionSnapshot String
+  result                 String?
+  remoteUrl              String?
+  errorMessage           String?
+  retryCount             Int             @default(0)
+  startedAt              DateTime?
+  completedAt            DateTime?
+  durationMs             Int?
+  createdAt              DateTime        @default(now())
+  updatedAt              DateTime        @updatedAt
+  workspace              Workspace       @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  publishBatch           PublishBatch    @relation(fields: [publishBatchId], references: [id], onDelete: Cascade)
+  channelConfig          ChannelConfig?  @relation(fields: [channelConfigId], references: [id], onDelete: SetNull)
+  channelVersion         ChannelVersion? @relation(fields: [channelVersionId], references: [id], onDelete: SetNull)
+
+  @@index([workspaceId, status])
+  @@index([publishBatchId])
+}
+
+model AICapability {
+  id                    String    @id @default(cuid())
+  workspaceId           String
+  capabilityId          String
+  name                  String
+  enabled               Boolean   @default(false)
+  automaticExecution    Boolean   @default(false)
+  humanConfirmation     Boolean   @default(true)
+  minimumPlan           String    @default("free")
+  promptTemplate        String    @default("")
+  inputFields           String    @default("[]")
+  outputFields          String    @default("[]")
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+  workspace             Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@unique([workspaceId, capabilityId])
+}
+
+model UsageRecord {
+  id          String    @id @default(cuid())
+  workspaceId String
+  type        String
+  quantity    Int       @default(1)
+  period      String
+  metadata    String    @default("{}")
+  createdAt   DateTime  @default(now())
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, period, type])
+}
+
+model Subscription {
+  id          String    @id @default(cuid())
+  workspaceId String    @unique
+  planId      String    @default("free")
+  status      String    @default("active")
+  currentFrom DateTime  @default(now())
+  currentTo   DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  workspace   Workspace @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+}

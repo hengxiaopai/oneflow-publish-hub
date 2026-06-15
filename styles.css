@@ -3170,7 +3170,7 @@ body:not([data-saas-route="workbench"]) .workbench-action {
 
 .login-options {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
   margin-top: 38px;
 }
@@ -3206,6 +3206,23 @@ body:not([data-saas-route="workbench"]) .workbench-action {
   margin: 5px 0 0;
   color: var(--text-muted);
   font-size: 12px;
+}
+
+.saas-dev-status {
+  margin-top: 12px;
+  padding: 13px 16px;
+  border: 1px solid oklch(78% 0.08 180 / 0.32);
+  border-radius: 14px;
+  color: var(--text-muted);
+  background: oklch(78% 0.08 180 / 0.07);
+  font-size: 12px;
+  line-height: 1.55;
+}
+
+.saas-dev-status[data-state="error"] {
+  border-color: oklch(68% 0.16 28 / 0.42);
+  color: oklch(86% 0.07 28);
+  background: oklch(62% 0.14 28 / 0.08);
 }
 
 .shell-toast {
@@ -3309,6 +3326,10 @@ body:not([data-saas-route="workbench"]) .workbench-action {
 
   .login-view {
     min-height: calc(100vh - 24px);
+  }
+
+  .login-options {
+    grid-template-columns: 1fr;
   }
 }
 

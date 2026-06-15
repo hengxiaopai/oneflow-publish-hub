@@ -1,6 +1,21 @@
 # Server-Side Publisher Design
 
-更新日期：2026-06-14
+更新日期：2026-06-15
+
+## Phase 4 已实现切片
+
+当前后端在创建 PublishBatch 时：
+
+1. 服务端检查 Free 套餐发布额度。
+2. 按 `workspaceId` 读取 Article 和 ChannelConfig。
+3. 保存不可变 `articleSnapshot` 和 `channelVersionSnapshot`。
+4. 生成 PublishTask。
+5. 由进程内 `MockPublisherService` 推进
+   `pending -> validating -> queued -> running -> draft_created/published/failed`。
+6. 回写 mock remote URL、耗时、结果或脱敏错误。
+7. 失败任务可通过 `/api/publish-tasks/:id/retry` 重试。
+
+这只是 Worker 雏形。它没有独立队列、跨进程锁、幂等键、延迟重试或死信队列。
 
 ## 核心原则
 

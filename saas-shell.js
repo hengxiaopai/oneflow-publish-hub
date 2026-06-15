@@ -126,7 +126,9 @@
 
   function normalizeHash(hash, sessionMode) {
     if (ROUTE_VALUES.has(hash)) return hash;
-    return sessionMode === "local" ? ROUTES.dashboard : ROUTES.login;
+    return ["local", "saas_dev"].includes(sessionMode)
+      ? ROUTES.dashboard
+      : ROUTES.login;
   }
 
   function createAIPreferences() {
@@ -160,6 +162,13 @@
       },
       aiPreferences: createAIPreferences(),
       lastDecision: null,
+      backendStatus: "idle",
+      remoteUser: null,
+      remoteWorkspace: null,
+      remoteArticles: [],
+      remoteChannels: [],
+      remotePublishBatches: [],
+      remoteArticleId: null,
     };
   }
 
@@ -181,6 +190,20 @@
     };
   }
 
+  function enterSaasDevelopment(state, payload = {}) {
+    return {
+      ...state,
+      sessionMode: "saas_dev",
+      cloudAuthStatus: "dev_session",
+      activeRoute: ROUTES.dashboard,
+      backendStatus: payload.backendStatus || state.backendStatus,
+      remoteUser: payload.user || state.remoteUser,
+      remoteWorkspace: payload.workspace || state.remoteWorkspace,
+      currentPlanId:
+        payload.subscription?.planId || state.currentPlanId || "free",
+    };
+  }
+
   function getWorkspaceTask(taskList, channelId) {
     return (taskList || []).find(
       (task) =>
@@ -195,7 +218,10 @@
       ...createSaasState().usage,
       ...(saasState?.usage || {}),
       articles: Math.max(1, Number(saasState?.usage?.articles) || 0),
-      publishBatches: (workspace.publishBatches || []).length,
+      publishBatches:
+        saasState?.sessionMode === "saas_dev"
+          ? Number(saasState?.usage?.publishBatches) || 0
+          : (workspace.publishBatches || []).length,
     };
     const planId = saasState?.currentPlanId || "free";
     const publishDecision = entitlements.canPublishBatch({ planId, usage });
@@ -429,7 +455,38 @@
   }
 
   function renderChannels(container, workspace, state) {
-    const channels = buildChannelConnectionViews(workspace, state.sessionMode);
+    const channels =
+      state.sessionMode === "saas_dev"
+        ? state.remoteChannels.map((channel) => ({
+            id: channel.id,
+            platform: channel.displayName,
+            type:
+              channel.channelType === "short_video"
+                ? "短视频"
+                : channel.channelType === "image_text"
+                  ? "图文"
+                  : "文章",
+            mark: String(channel.displayName || "C").slice(0, 1),
+            connectionStatus:
+              channel.connectionStatus === "connected"
+                ? "connected"
+                : channel.connectionStatus === "invalid"
+                  ? "reauthorize"
+                  : "not_connected",
+            connectionLabel:
+              channel.connectionStatus === "connected"
+                ? "已连接"
+                : channel.connectionStatus === "invalid"
+                  ? "需要重新授权"
+                  : "未连接",
+            credentialStorage: "服务端加密托管",
+            localDebugAvailable: false,
+            action:
+              channel.connectionStatus === "connected"
+                ? "管理连接"
+                : "连接渠道",
+          }))
+        : buildChannelConnectionViews(workspace, state.sessionMode);
     container.innerHTML = `
       <div class="saas-page">
         ${pageHeader(
@@ -645,6 +702,12 @@
   }
 
   function renderSettings(container, state) {
+    const modeLabel =
+      state.sessionMode === "saas_dev"
+        ? "SaaS Dev Mode"
+        : state.sessionMode === "local"
+          ? "本地演示模式"
+          : "SaaS 云端占位";
     container.innerHTML = `
       <div class="saas-page">
         ${pageHeader(
@@ -656,7 +719,7 @@
           <section>
             <span class="eyebrow">Workspace</span>
             <h2>技术内容引擎</h2>
-            <p>当前运行模式：${state.sessionMode === "local" ? "本地开发模式" : "SaaS 云端占位"}</p>
+            <p>当前运行模式：${modeLabel}</p>
             <label>工作区名称<input type="text" value="技术内容引擎" aria-label="工作区名称" /></label>
             <button type="button" data-shell-action="save-settings">保存设置</button>
           </section>
@@ -691,6 +754,7 @@
     const SESSION_KEY = "oneflow.session.mode";
     const PREFERENCES_KEY = "oneflow.saas.preferences.v1";
     const app = globalScope.OneFlowApp;
+    const apiClient = globalScope.OneFlowApiClient;
     if (!app) return;
 
     const refs = {
@@ -699,18 +763,25 @@
       productMenuToggle: document.querySelector("#toggle-product-menu"),
       login: document.querySelector("#login-view"),
       cloudPlaceholder: document.querySelector("#cloud-auth-placeholder"),
+      saasDevStatus: document.querySelector("#saas-dev-status"),
+      saasDevButton: document.querySelector("#enter-saas-dev-mode"),
       workbench: document.querySelector("#workbench-view"),
       agentRail: document.querySelector("#agent-rail"),
       publishDock: document.querySelector("#publish-dock"),
       history: document.querySelector("#publish-history-view"),
       articles: document.querySelector("#content-library-view"),
       shellToast: document.querySelector("#shell-toast"),
+      profileButton: document.querySelector(".profile-button"),
     };
     let state = createSaasState();
     let toastTimer = null;
+    let remoteSaveTimer = null;
+    let remoteSaveInFlight = false;
     const storedMode = globalScope.sessionStorage.getItem(SESSION_KEY);
     if (storedMode === "local") {
       state = enterLocalDevelopment(state);
+    } else if (storedMode === "saas_dev") {
+      state = enterSaasDevelopment(state, { backendStatus: "connecting" });
     }
     try {
       const preferences = JSON.parse(
@@ -734,6 +805,195 @@
         () => refs.shellToast.classList.remove("is-visible"),
         2800
       );
+    }
+
+    function setSaasDevStatus(message, status = "loading") {
+      refs.saasDevStatus.hidden = !message;
+      refs.saasDevStatus.textContent = message || "";
+      refs.saasDevStatus.dataset.state = status;
+    }
+
+    function updateProfileMode() {
+      const strong = refs.profileButton?.querySelector("strong");
+      const small = refs.profileButton?.querySelector("small");
+      if (!strong || !small) return;
+      if (state.sessionMode === "saas_dev") {
+        strong.textContent =
+          state.remoteWorkspace?.name || "OneFlow SaaS Dev";
+        small.textContent = `${state.currentPlanId.toUpperCase()} · API 模式`;
+        refs.profileButton.setAttribute("aria-label", "当前模式：SaaS Dev");
+      } else {
+        strong.textContent = "本地工作区";
+        small.textContent = "Free · 演示模式";
+        refs.profileButton.setAttribute("aria-label", "当前模式：本地演示");
+      }
+    }
+
+    function usageFromApi(usage) {
+      return {
+        articles: Number(usage?.articles?.used) || 0,
+        publishBatches: Number(usage?.publishBatches?.used) || 0,
+        aiAdaptations: Number(usage?.aiAdaptations?.used) || 0,
+        connectedChannels: Number(usage?.connectedChannels?.used) || 0,
+        members: Number(usage?.members?.used) || 0,
+      };
+    }
+
+    async function ensureSaasChannel() {
+      if (!state.remoteChannels.length) {
+        const channel = await apiClient.saveChannel({
+          platformId: "mock-blog",
+          displayName: "SaaS Dev Mock Blog",
+          channelType: "article",
+          configuration: { publishMode: "create_draft" },
+          mockBehavior: "success",
+        });
+        state.remoteChannels = [channel];
+      }
+    }
+
+    async function ensureSaasSeedData() {
+      if (!state.remoteArticles.length) {
+        const article = await apiClient.saveArticle(
+          app.getState().currentArticle
+        );
+        state.remoteArticles = [article];
+        state.remoteArticleId = article.id;
+      } else {
+        state.remoteArticleId = state.remoteArticles[0].id;
+      }
+      await ensureSaasChannel();
+    }
+
+    async function loadSaasWorkspace(sessionContext = null) {
+      if (!apiClient) {
+        throw new Error("后端 API Client 未加载，可切换到本地演示模式。");
+      }
+      const auth = sessionContext || (await apiClient.getCurrentUser());
+      const [usage, articles, channels, batches] = await Promise.all([
+        apiClient.getUsage(),
+        apiClient.listArticles(),
+        apiClient.listChannels(),
+        apiClient.listPublishBatches(),
+      ]);
+      state = enterSaasDevelopment(state, {
+        ...auth,
+        backendStatus: "connected",
+      });
+      state.usage = usageFromApi(usage);
+      state.remoteArticles = articles;
+      state.remoteChannels = channels;
+      state.remotePublishBatches = batches;
+      await ensureSaasSeedData();
+      state.usage.articles = state.remoteArticles.length;
+      updateProfileMode();
+      return state;
+    }
+
+    async function startSaasDevelopment() {
+      refs.saasDevButton.disabled = true;
+      setSaasDevStatus("正在连接本地 API 与 SQLite 工作区…");
+      try {
+        const session = await apiClient.startDevSession("browser-default");
+        await loadSaasWorkspace(session);
+        globalScope.sessionStorage.setItem(SESSION_KEY, "saas_dev");
+        globalScope.location.hash = ROUTES.dashboard;
+        setSaasDevStatus("");
+        renderRoute();
+      } catch (error) {
+        state = createSaasState();
+        globalScope.sessionStorage.removeItem(SESSION_KEY);
+        setSaasDevStatus(
+          error.message || "后端服务未启动，可切换到本地开发模式。",
+          "error"
+        );
+      } finally {
+        refs.saasDevButton.disabled = false;
+      }
+    }
+
+    async function restoreSaasDevelopment() {
+      try {
+        await loadSaasWorkspace();
+        renderRoute();
+      } catch {
+        try {
+          const session = await apiClient.startDevSession("browser-default");
+          await loadSaasWorkspace(session);
+          renderRoute();
+        } catch (error) {
+          state = createSaasState();
+          globalScope.sessionStorage.removeItem(SESSION_KEY);
+          globalScope.location.hash = ROUTES.login;
+          setSaasDevStatus(
+            error.message || "后端服务未启动，可切换到本地开发模式。",
+            "error"
+          );
+          renderRoute();
+        }
+      }
+    }
+
+    function renderRemoteArticles() {
+      if (state.sessionMode !== "saas_dev") return;
+      const list = document.querySelector("#content-library-list");
+      if (!list) return;
+      list.innerHTML = state.remoteArticles.length
+        ? state.remoteArticles
+            .map((article) => {
+              const wordCount = String(article.contentHtml || "")
+                .replace(/<[^>]+>/g, "")
+                .trim().length;
+              return `
+                <article class="library-row" data-remote-article-id="${escapeHtml(article.id)}">
+                  <div>
+                    <span class="status-chip">SaaS · ${escapeHtml(article.status)}</span>
+                    <strong>${escapeHtml(article.title)}</strong>
+                    <small>服务端更新 ${formatDate(article.updatedAt)}</small>
+                  </div>
+                  <span>${wordCount.toLocaleString("zh-CN")} 字</span>
+                  <span>${state.remotePublishBatches.filter((batch) => batch.articleId === article.id).length} 个发布批次</span>
+                  <div class="history-actions">
+                    <button type="button" data-shell-action="open-remote-article">打开工作台</button>
+                  </div>
+                </article>
+              `;
+            })
+            .join("")
+        : '<div class="empty-state">后端工作区暂无文章。</div>';
+    }
+
+    function renderRemotePublishHistory() {
+      if (state.sessionMode !== "saas_dev") return;
+      const list = document.querySelector("#publish-history-list");
+      if (!list) return;
+      list.innerHTML = state.remotePublishBatches.length
+        ? state.remotePublishBatches
+            .map((batch) => {
+              const tasks = batch.tasks || [];
+              const success = tasks.filter((task) =>
+                ["draft_created", "published"].includes(task.status)
+              ).length;
+              const failed = tasks.filter(
+                (task) => task.status === "failed"
+              ).length;
+              return `
+                <article class="history-row">
+                  <time>${formatDate(batch.createdAt)}</time>
+                  <div class="history-article">
+                    <strong>${escapeHtml(batch.articleSnapshot?.title || "文章快照")}</strong>
+                    <span>${tasks.length} 个渠道 · SaaS Worker</span>
+                  </div>
+                  <div class="history-results">
+                    <span class="is-success">${success} 成功</span>
+                    <span class="${failed ? "is-danger" : ""}">${failed} 失败</span>
+                  </div>
+                  <span class="history-strategy">${escapeHtml(batch.strategy)}</span>
+                </article>
+              `;
+            })
+            .join("")
+        : '<div class="empty-state">后端尚未创建发布批次。</div>';
     }
 
     function hideLegacyViews() {
@@ -785,7 +1045,10 @@
 
     function renderRoute() {
       let route = normalizeHash(globalScope.location.hash, state.sessionMode);
-      if (route !== ROUTES.login && state.sessionMode !== "local") {
+      if (
+        route !== ROUTES.login &&
+        !["local", "saas_dev"].includes(state.sessionMode)
+      ) {
         route = ROUTES.login;
       }
       if (globalScope.location.hash !== route) {
@@ -805,12 +1068,15 @@
           state.cloudAuthStatus !== "placeholder";
       } else {
         refs.topShell.hidden = false;
+        updateProfileMode();
         if (route === ROUTES.workbench) {
           app.openLegacyView("workbench");
         } else if (route === ROUTES.articles) {
           app.openLegacyView("library");
+          renderRemoteArticles();
         } else if (route === ROUTES.publishHistory) {
           app.openLegacyView("history");
+          renderRemotePublishHistory();
         } else {
           hideLegacyViews();
           renderCustomRoute(route);
@@ -863,7 +1129,12 @@
         .shellAction;
       if (!action) return;
       if (action === "new-article") {
+        if (state.sessionMode === "saas_dev") {
+          state.remoteArticleId = null;
+        }
         app.createNewArticle();
+        globalScope.location.hash = ROUTES.workbench;
+      } else if (action === "open-remote-article") {
         globalScope.location.hash = ROUTES.workbench;
       } else if (action === "import-markdown") {
         app.openImport();
@@ -885,6 +1156,9 @@
         document.querySelector("#reset-demo")?.click();
       } else if (action === "exit-local") {
         globalScope.sessionStorage.removeItem(SESSION_KEY);
+        if (state.sessionMode === "saas_dev") {
+          apiClient?.logout().catch(() => {});
+        }
         state = createSaasState();
         globalScope.location.hash = ROUTES.login;
         renderRoute();
@@ -899,6 +1173,8 @@
         globalScope.location.hash = ROUTES.workbench;
         renderRoute();
       });
+
+    refs.saasDevButton.addEventListener("click", startSaasDevelopment);
 
     document
       .querySelector("#show-cloud-placeholder")
@@ -925,7 +1201,35 @@
     });
 
     globalScope.addEventListener("hashchange", renderRoute);
-    app.subscribe(() => {
+    app.subscribe((workspace) => {
+      if (
+        state.sessionMode === "saas_dev" &&
+        state.backendStatus === "connected" &&
+        !remoteSaveInFlight
+      ) {
+        globalScope.clearTimeout(remoteSaveTimer);
+        remoteSaveTimer = globalScope.setTimeout(async () => {
+          remoteSaveInFlight = true;
+          try {
+            const article = await apiClient.saveArticle(
+              workspace.currentArticle,
+              state.remoteArticleId
+            );
+            state.remoteArticleId = article.id;
+            state.remoteArticles = [
+              article,
+              ...state.remoteArticles.filter(
+                (item) => item.id !== article.id
+              ),
+            ];
+            state.usage.articles = state.remoteArticles.length;
+          } catch (error) {
+            showShellToast(error.message);
+          } finally {
+            remoteSaveInFlight = false;
+          }
+        }, 650);
+      }
       if (
         ![
           ROUTES.workbench,
@@ -937,7 +1241,49 @@
         renderRoute();
       }
     });
+    app.subscribePublishBatches?.(async (batch, workspace) => {
+      if (
+        state.sessionMode !== "saas_dev" ||
+        state.backendStatus !== "connected"
+      ) {
+        return;
+      }
+      try {
+        await ensureSaasChannel();
+        const article = await apiClient.saveArticle(
+          workspace.currentArticle,
+          state.remoteArticleId
+        );
+        state.remoteArticleId = article.id;
+        state.remoteArticles = [
+          article,
+          ...state.remoteArticles.filter((item) => item.id !== article.id),
+        ];
+        const remoteBatch = await apiClient.createPublishBatch({
+          articleId: article.id,
+          channelIds: [state.remoteChannels[0].id],
+          strategy: batch.strategy || "automatic_first",
+          postActions: batch.postActions || [],
+        });
+        state.remotePublishBatches = [
+          remoteBatch,
+          ...state.remotePublishBatches.filter(
+            (item) => item.id !== remoteBatch.id
+          ),
+        ];
+        state.usage.publishBatches += 1;
+        showShellToast("SaaS Dev 发布批次已交给后端 Mock Worker。");
+        if (state.activeRoute === ROUTES.publishHistory) {
+          renderRemotePublishHistory();
+        }
+      } catch (error) {
+        showShellToast(error.message);
+      }
+    });
     renderRoute();
+    if (storedMode === "saas_dev") {
+      restoreSaasDevelopment();
+    }
   }
 
   const api = {
@@ -948,6 +1294,7 @@
     createSaasState,
     enterCloudPlaceholder,
     enterLocalDevelopment,
+    enterSaasDevelopment,
     normalizeHash,
     toggleAICapability,
   };

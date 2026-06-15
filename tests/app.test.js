@@ -446,4 +446,5 @@ test("browser app exposes a narrow bridge for the SaaS product shell", () => {
   assert.match(source, /subscribe\(listener\)/);
   assert.match(source, /createNewArticle\(\)/);
   assert.match(source, /openImport\(\)/);
+  assert.match(source, /subscribePublishBatches\(listener\)/);
 });
