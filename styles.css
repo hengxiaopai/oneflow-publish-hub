@@ -2926,6 +2926,17 @@ body:not([data-saas-route="workbench"]) .workbench-action {
   gap: 12px;
 }
 
+.halo-connection-status > div {
+  min-width: 0;
+}
+
+.halo-connection-status small {
+  display: block;
+  margin-top: 3px;
+  color: var(--text-subtle);
+  font-size: 11px;
+}
+
 .halo-connection-status[data-status="connected"] .connection-chip {
   color: var(--success);
   background: oklch(73% 0.14 153 / 0.11);
@@ -2982,6 +2993,14 @@ body:not([data-saas-route="workbench"]) .workbench-action {
 .halo-form-grid small {
   color: var(--text-subtle);
   line-height: 1.5;
+}
+
+#halo-url-safety-message[data-state="error"] {
+  color: oklch(84% 0.1 28);
+}
+
+.halo-connection-panel[aria-busy="true"] {
+  cursor: progress;
 }
 
 .halo-connection-actions {
@@ -3054,6 +3073,67 @@ body:not([data-saas-route="workbench"]) .workbench-action {
   background: oklch(100% 0 0 / 0.05);
   font-size: 11px;
   text-decoration: none;
+}
+
+.remote-task-links button:hover:not(:disabled),
+.remote-task-links a:hover {
+  border-color: var(--line-strong);
+  background: oklch(100% 0 0 / 0.1);
+}
+
+.remote-task-links button:focus-visible,
+.remote-task-links a:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.remote-task-links button:disabled {
+  cursor: not-allowed;
+  opacity: 0.46;
+}
+
+.task-event-timeline {
+  grid-column: 1 / -1;
+  min-width: 0;
+  padding-top: 9px;
+  border-top: 1px solid var(--line);
+}
+
+.task-event-timeline summary {
+  width: fit-content;
+  color: var(--text-muted);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+.task-event-timeline summary:hover {
+  color: var(--text);
+}
+
+.task-event-timeline ol {
+  display: grid;
+  gap: 9px;
+  margin: 12px 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.task-event-timeline li {
+  display: grid;
+  grid-template-columns: minmax(112px, auto) minmax(0, 1fr);
+  gap: 12px;
+  align-items: start;
+}
+
+.task-event-timeline time {
+  color: var(--text-subtle);
+  font-size: 11px;
+}
+
+.task-event-timeline li strong {
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  font-weight: 600;
 }
 
 .media-layout {
@@ -3624,6 +3704,11 @@ body:not([data-saas-route="workbench"]) .workbench-action {
 
   .remote-task-links {
     justify-content: flex-start;
+  }
+
+  .task-event-timeline li {
+    grid-template-columns: 1fr;
+    gap: 2px;
   }
 
   .channel-setting-row button {

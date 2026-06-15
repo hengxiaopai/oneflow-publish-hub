@@ -5,6 +5,9 @@ import { createTestApp, resetDatabase, startSession } from "./helpers.js";
 let app;
 let draftAttempts = 0;
 let failFirstDraft = false;
+let conflictFirstDraft = false;
+let lastDraftPayload = null;
+let draftDelayMs = 0;
 
 before(async () => {
   app = await createTestApp(
@@ -13,6 +16,13 @@ before(async () => {
       fetchImpl: async (url, options) => {
         if (options.method === "POST") {
           draftAttempts += 1;
+          lastDraftPayload = JSON.parse(options.body);
+          if (draftDelayMs) {
+            await new Promise((resolve) => setTimeout(resolve, draftDelayMs));
+          }
+          if (conflictFirstDraft && draftAttempts === 1) {
+            return Response.json({ message: "Slug conflict" }, { status: 409 });
+          }
           if (failFirstDraft && draftAttempts === 1) {
             return Response.json({ message: "Service unavailable" }, { status: 503 });
           }
@@ -44,6 +54,9 @@ before(async () => {
 beforeEach(async () => {
   draftAttempts = 0;
   failFirstDraft = false;
+  conflictFirstDraft = false;
+  lastDraftPayload = null;
+  draftDelayMs = 0;
   await resetDatabase(app);
 });
 
@@ -102,7 +115,109 @@ test("Halo worker writes draft remote information into publish history", async (
   assert.match(task.remotePreviewUrl, /archives\/oneflow-halo$/);
   assert.ok(task.draftCreatedAt);
   assert.ok(task.lastSyncAt);
+  assert.equal(task.retryable, false);
+  assert.equal(
+    task.events.some((event) => event.type === "halo_draft_created"),
+    true,
+  );
   assert.equal(JSON.stringify(task).includes("pat_halo_secret"), false);
+});
+
+test("repeating the same immutable Halo batch reuses the remote result", async () => {
+  const session = await startSession(app);
+  const { article, channel } = await setup(session);
+  const payload = { articleId: article.id, channelIds: [channel.id] };
+
+  const first = await app.inject({
+    method: "POST",
+    url: "/api/publish-batches",
+    headers: session.headers,
+    payload,
+  });
+  const second = await app.inject({
+    method: "POST",
+    url: "/api/publish-batches",
+    headers: session.headers,
+    payload,
+  });
+
+  assert.equal(first.statusCode, 202);
+  assert.equal(second.statusCode, 202);
+  assert.equal(draftAttempts, 1);
+  assert.equal(
+    second.json().data.tasks[0].events.some(
+      (event) => event.type === "idempotency_reused",
+    ),
+    true,
+  );
+  assert.equal(
+    second.json().data.tasks[0].remotePostName,
+    first.json().data.tasks[0].remotePostName,
+  );
+});
+
+test("concurrent execution of one Halo task performs one remote request", async () => {
+  draftDelayMs = 40;
+  const session = await startSession(app, "concurrent-halo-task");
+  const workspaceId = session.body.data.workspace.id;
+  const { article, channel } = await setup(session);
+  const batch = await app.prisma.publishBatch.create({
+    data: {
+      workspaceId,
+      articleId: article.id,
+      articleSnapshot: JSON.stringify(article),
+    },
+  });
+  const task = await app.prisma.publishTask.create({
+    data: {
+      workspaceId,
+      publishBatchId: batch.id,
+      channelConfigId: channel.id,
+      status: "pending",
+      idempotencyKey: "publish_concurrent_halo_test",
+      channelVersionSnapshot: JSON.stringify({
+        title: article.title,
+        platformTitle: article.title,
+        contentHtml: article.contentHtml,
+        contentMarkdown: article.contentMarkdown,
+        versionStatus: "ready",
+        slug: "concurrent-halo-task",
+      }),
+    },
+  });
+
+  await Promise.all([
+    app.publisherRouter.runTask(task.id),
+    app.publisherRouter.runTask(task.id),
+  ]);
+
+  assert.equal(draftAttempts, 1);
+  assert.equal(
+    (await app.prisma.publishTask.findUnique({ where: { id: task.id } })).status,
+    "draft_created",
+  );
+});
+
+test("Halo slug conflicts receive one deterministic automatic retry", async () => {
+  conflictFirstDraft = true;
+  const session = await startSession(app);
+  const { article, channel } = await setup(session);
+  const response = await app.inject({
+    method: "POST",
+    url: "/api/publish-batches",
+    headers: session.headers,
+    payload: { articleId: article.id, channelIds: [channel.id] },
+  });
+
+  const task = response.json().data.tasks[0];
+  assert.equal(task.status, "draft_created");
+  assert.equal(draftAttempts, 2);
+  assert.equal(task.retryCount, 1);
+  assert.match(lastDraftPayload.post.spec.slug, /-[a-f0-9]{8}$/);
+  assert.equal(
+    task.events.some((event) => event.type === "slug_conflict_resolved"),
+    true,
+  );
 });
 
 test("Halo publish mode creates the draft before publishing", async () => {
@@ -134,6 +249,8 @@ test("failed Halo task retries with the same immutable context", async () => {
   });
   const failed = response.json().data.tasks[0];
   assert.equal(failed.status, "failed");
+  assert.equal(failed.retryable, true);
+  assert.equal(failed.lastErrorCode, "HALO_UPSTREAM_ERROR");
   assert.equal(failed.channelVersionSnapshot.title, article.title);
 
   const retry = await app.inject({
@@ -144,6 +261,7 @@ test("failed Halo task retries with the same immutable context", async () => {
   assert.equal(retry.statusCode, 202);
   assert.equal(retry.json().data.status, "draft_created");
   assert.equal(retry.json().data.retryCount, 1);
+  assert.equal(retry.json().data.retryable, false);
   assert.equal(retry.json().data.channelVersionSnapshot.title, article.title);
 });
 

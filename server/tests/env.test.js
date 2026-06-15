@@ -23,6 +23,18 @@ test("environment parser accepts a complete configuration", () => {
     "http://127.0.0.1:4173",
     "http://localhost:4173",
   ]);
+  assert.equal(config.allowPrivateHaloUrls, false);
+  assert.equal(config.haloRequestTimeoutMs, 15000);
+});
+
+test("environment parser accepts Halo reliability overrides", () => {
+  const config = parseEnvironment({
+    ...validEnvironment,
+    ALLOW_PRIVATE_HALO_URLS: "true",
+    HALO_REQUEST_TIMEOUT_MS: "9000",
+  });
+  assert.equal(config.allowPrivateHaloUrls, true);
+  assert.equal(config.haloRequestTimeoutMs, 9000);
 });
 
 test("environment parser reports missing critical values", () => {

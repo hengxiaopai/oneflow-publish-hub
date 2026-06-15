@@ -31,6 +31,19 @@ function secret(value, key, issues) {
   return normalized;
 }
 
+function booleanValue(value, fallback = false) {
+  if (value === undefined || value === null || value === "") return fallback;
+  return String(value).trim().toLowerCase() === "true";
+}
+
+function integerRange(value, key, issues, fallback, min, max) {
+  const number = Number(value ?? fallback);
+  if (!Number.isInteger(number) || number < min || number > max) {
+    issues.push(`${key} must be an integer between ${min} and ${max}.`);
+  }
+  return number;
+}
+
 export function parseEnvironment(source = process.env) {
   const issues = [];
   const nodeEnv = String(source.NODE_ENV || "development").trim();
@@ -60,6 +73,18 @@ export function parseEnvironment(source = process.env) {
   if (nodeEnv === "production" && corsOrigin.includes("*")) {
     issues.push("CORS_ORIGIN cannot contain * in production.");
   }
+  const allowPrivateHaloUrls = booleanValue(
+    source.ALLOW_PRIVATE_HALO_URLS,
+    false,
+  );
+  const haloRequestTimeoutMs = integerRange(
+    source.HALO_REQUEST_TIMEOUT_MS,
+    "HALO_REQUEST_TIMEOUT_MS",
+    issues,
+    15000,
+    1000,
+    120000,
+  );
   if (issues.length) throw new EnvironmentValidationError(issues);
 
   return {
@@ -71,6 +96,8 @@ export function parseEnvironment(source = process.env) {
     sessionCookieName,
     sessionTtlHours,
     corsOrigin,
+    allowPrivateHaloUrls,
+    haloRequestTimeoutMs,
     isTest: nodeEnv === "test",
   };
 }

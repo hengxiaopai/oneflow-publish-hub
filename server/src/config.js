@@ -15,6 +15,10 @@ export function loadConfig(overrides = {}) {
       overrides.sessionCookieName ?? process.env.SESSION_COOKIE_NAME,
     SESSION_TTL_HOURS:
       overrides.sessionTtlHours ?? process.env.SESSION_TTL_HOURS,
+    ALLOW_PRIVATE_HALO_URLS:
+      overrides.allowPrivateHaloUrls ?? process.env.ALLOW_PRIVATE_HALO_URLS,
+    HALO_REQUEST_TIMEOUT_MS:
+      overrides.haloRequestTimeoutMs ?? process.env.HALO_REQUEST_TIMEOUT_MS,
   });
 
   return {

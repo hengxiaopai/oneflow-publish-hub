@@ -47,6 +47,10 @@ export function createMockPublisherService(prisma) {
             provider: "mock",
             outcome: "failed",
           }),
+          lastErrorCode: "MOCK_PUBLISH_FAILED",
+          lastErrorMessage: "Mock Publisher failed by configured behavior.",
+          retryable: task.retryCount < task.maxRetries,
+          nextRetryAt: new Date(),
           completedAt,
           durationMs,
         },
@@ -74,6 +78,10 @@ export function createMockPublisherService(prisma) {
         completedAt,
         durationMs,
         errorMessage: null,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        retryable: false,
+        nextRetryAt: null,
       },
     });
     await refreshPublishBatch(prisma, task.publishBatchId);

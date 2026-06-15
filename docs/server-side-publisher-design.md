@@ -2,7 +2,7 @@
 
 更新日期：2026-06-15
 
-## Phase 6 已实现
+## Phase 6.1 已实现
 
 当前后端包含三个明确角色：
 
@@ -35,8 +35,9 @@ sequenceDiagram
   API->>DB: Save article/channel snapshots and tasks
   API->>R: runBatch(batchId)
   R->>W: runTask(taskId)
+  W->>DB: Acquire expiring task lock
   W->>DB: Read encrypted PAT and immutable snapshots
-  W->>W: Validate config, payload, sanitizer and stale state
+  W->>W: Validate URL safety, config, payload, sanitizer and stale state
   W->>H: POST Console API /posts
   H-->>W: Halo Post
   opt publishMode = publish
@@ -44,6 +45,7 @@ sequenceDiagram
     H-->>W: Published Halo Post
   end
   W->>DB: Write remote fields, status, timing and safe summary
+  W->>DB: Append safe task events and release lock
   API-->>UI: PublishBatch detail
 ```
 
@@ -64,6 +66,9 @@ retrying
 
 失败重试复用原始 ArticleSnapshot 和 ChannelVersionSnapshot，不读取当前编辑中的文章。
 
+相同 workspace、平台、发布模式与不可变快照会生成稳定幂等键。已有成功远程结果时
+直接复用，不重复创建 Halo 草稿。
+
 ## 发布前检查
 
 Halo Worker 在远程请求前检查：
@@ -74,6 +79,7 @@ Halo Worker 在远程请求前检查：
 - 标题、正文和 slug 有效。
 - HTML 与服务端 sanitizer 输出一致。
 - ChannelVersion 不是 `stale` 或 `needs_adaptation`。
+- Halo Base URL 通过 SSRF / DNS 私网解析检查。
 
 失败时不创建远程草稿，任务写为 `failed`，同时创建 `ValidationIssue`。
 
@@ -87,5 +93,6 @@ Halo Worker 在远程请求前检查：
 
 ## 当前限制
 
-Worker 仍在 API 进程内同步执行，尚无 Durable Queue、租约、幂等键、指数退避和死信
-队列。生产环境应使用 PostgreSQL、独立 Worker、KMS/envelope encryption 和任务队列。
+Worker 仍在 API 进程内同步执行。Phase 6.1 已有数据库租约锁、幂等键、可解释重试
+字段和事件日志，但尚无常驻调度器、Durable Queue 或死信队列。生产环境应使用
+PostgreSQL、独立 Worker、KMS/envelope encryption 和 Redis/BullMQ 或云队列。

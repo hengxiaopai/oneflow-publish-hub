@@ -13,6 +13,7 @@
     "test": "npm run test:frontend && npm run test:server",
     "test:frontend": "node --test tests/*.test.js",
     "test:server": "npm --prefix server test",
+    "test:halo-smoke": "npm --prefix server run test:halo-smoke",
     "lint": "npm run check",
     "check": "node scripts/check.mjs && npm --prefix server run prisma:validate && npm --prefix server run prisma:validate:postgres",
     "security:scan": "node scripts/scan-sensitive.mjs",

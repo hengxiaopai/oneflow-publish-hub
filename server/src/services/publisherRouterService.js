@@ -8,6 +8,7 @@ export function createPublisherRouterService(
       include: { channelConfig: true },
     });
     if (!task) throw new Error("Publish task not found");
+    if (["draft_created", "published"].includes(task.status)) return task;
     const useHalo =
       task.channelConfig?.platformId === "halo" &&
       task.channelConfig?.publisherMode === "halo";
@@ -22,11 +23,12 @@ export function createPublisherRouterService(
       orderBy: { createdAt: "asc" },
     });
     for (const task of tasks) {
-      await runTask(task.id);
+      if (!["draft_created", "published"].includes(task.status)) {
+        await runTask(task.id);
+      }
     }
     return prisma.publishBatch.findUnique({ where: { id: batchId } });
   }
 
   return { runBatch, runTask };
 }
-

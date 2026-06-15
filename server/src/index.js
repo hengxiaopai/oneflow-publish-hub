@@ -54,7 +54,10 @@ export async function buildApp(options = {}) {
   const haloPublisher = createHaloPublisherService({
     encryptionKey: config.encryptionKey,
     fetchImpl: options.fetchImpl || globalThis.fetch,
-    timeoutMs: options.haloTimeoutMs || 15000,
+    timeoutMs: options.haloTimeoutMs || config.haloRequestTimeoutMs,
+    nodeEnv: config.nodeEnv,
+    allowPrivateHaloUrls: config.allowPrivateHaloUrls,
+    resolveHost: options.resolveHaloHost,
   });
   const haloPublisherWorker = createHaloPublishWorkerService(
     prisma,

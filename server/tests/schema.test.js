@@ -17,6 +17,7 @@ test("Prisma schema defines the Phase 4 SaaS models and tenant snapshots", async
     "ChannelVersion",
     "PublishBatch",
     "PublishTask",
+    "PublishTaskEvent",
     "AICapability",
     "UsageRecord",
     "Subscription",
@@ -41,4 +42,11 @@ test("Prisma schema defines the Phase 4 SaaS models and tenant snapshots", async
   assert.match(schema, /passwordHash\s+String\?/);
   assert.match(schema, /tokenHash\s+String/);
   assert.match(schema, /plan\s+String\s+@default\("free"\)/);
+  assert.match(schema, /idempotencyKey\s+String/);
+  assert.match(schema, /lockedAt\s+DateTime\?/);
+  assert.match(schema, /lockOwner\s+String\?/);
+  assert.match(schema, /maxRetries\s+Int/);
+  assert.match(schema, /nextRetryAt\s+DateTime\?/);
+  assert.match(schema, /lastErrorCode\s+String\?/);
+  assert.match(schema, /retryable\s+Boolean/);
 });

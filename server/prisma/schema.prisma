@@ -38,6 +38,7 @@ model Workspace {
   channelVersions ChannelVersion[]
   publishBatches  PublishBatch[]
   publishTasks    PublishTask[]
+  publishTaskEvents PublishTaskEvent[]
   aiCapabilities  AICapability[]
   usageRecords    UsageRecord[]
   validationIssues ValidationIssue[]
@@ -185,6 +186,9 @@ model PublishTask {
   channelConfigId        String?
   channelVersionId       String?
   status                 String          @default("pending")
+  idempotencyKey         String          @default("")
+  lockedAt               DateTime?
+  lockOwner              String?
   channelVersionSnapshot String
   result                 String?
   remoteUrl              String?
@@ -199,7 +203,12 @@ model PublishTask {
   lastSyncAt             DateTime?
   rawResponseSummary     String?
   errorMessage           String?
+  lastErrorCode          String?
+  lastErrorMessage       String?
+  retryable              Boolean         @default(false)
   retryCount             Int             @default(0)
+  maxRetries             Int             @default(3)
+  nextRetryAt            DateTime?
   startedAt              DateTime?
   completedAt            DateTime?
   durationMs             Int?
@@ -210,9 +219,28 @@ model PublishTask {
   channelConfig          ChannelConfig?  @relation(fields: [channelConfigId], references: [id], onDelete: SetNull)
   channelVersion         ChannelVersion? @relation(fields: [channelVersionId], references: [id], onDelete: SetNull)
   validationIssues       ValidationIssue[]
+  events                 PublishTaskEvent[]
 
   @@index([workspaceId, status])
+  @@index([workspaceId, idempotencyKey])
   @@index([publishBatchId])
+}
+
+model PublishTaskEvent {
+  id               String      @id @default(cuid())
+  workspaceId      String
+  publishTaskId    String
+  type             String
+  message          String
+  metadata         String      @default("{}")
+  safeRemoteStatus String?
+  durationMs       Int?
+  createdAt        DateTime    @default(now())
+  workspace        Workspace   @relation(fields: [workspaceId], references: [id], onDelete: Cascade)
+  publishTask      PublishTask @relation(fields: [publishTaskId], references: [id], onDelete: Cascade)
+
+  @@index([workspaceId, createdAt])
+  @@index([publishTaskId, createdAt])
 }
 
 model ValidationIssue {

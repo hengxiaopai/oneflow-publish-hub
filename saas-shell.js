@@ -837,8 +837,10 @@
       haloForm: document.querySelector("#halo-connection-form"),
       haloModeWarning: document.querySelector("#halo-mode-warning"),
       haloConnectionStatus: document.querySelector("#halo-connection-status"),
+      haloUrlSafety: document.querySelector("#halo-url-safety-message"),
       haloToken: document.querySelector("#halo-pat-token"),
       haloTestButton: document.querySelector("#test-halo-connection"),
+      haloSaveButton: document.querySelector("#save-halo-connection"),
       haloClearButton: document.querySelector("#clear-halo-credential"),
       haloCloseButton: document.querySelector("#close-halo-connection"),
     };
@@ -901,6 +903,28 @@
       refs.haloForm
         ?.querySelectorAll("button")
         .forEach((button) => (button.disabled = busy));
+      refs.haloForm?.setAttribute("aria-busy", String(busy));
+      if (refs.haloTestButton) {
+        refs.haloTestButton.textContent = busy ? "连接处理中…" : "测试连接";
+      }
+      if (refs.haloSaveButton) {
+        refs.haloSaveButton.textContent = busy ? "安全校验中…" : "保存连接";
+      }
+    }
+
+    function validateHaloBaseUrl(value) {
+      try {
+        const url = new URL(value);
+        if (!["http:", "https:"].includes(url.protocol)) {
+          return "仅支持 HTTP 或 HTTPS 地址。";
+        }
+        if (url.username || url.password) {
+          return "Base URL 不能包含用户名或密码。";
+        }
+        return "";
+      } catch {
+        return "请输入完整的 Halo Base URL。";
+      }
     }
 
     function updateHaloDialog() {
@@ -947,13 +971,16 @@
       refs.haloConnectionStatus.dataset.status = connectionStatus;
       refs.haloConnectionStatus.innerHTML = `
         <span class="connection-chip">${statusLabels[connectionStatus] || "未连接"}</span>
-        <p>${
-          channel?.lastTestMessage
-            ? escapeHtml(channel.lastTestMessage)
-            : channel?.credentialStatus === "stored"
-              ? "凭据已由服务端加密保存，建议在发布前测试连接。"
-              : "配置 Halo 2.x Console API 与 PAT 后，可由服务端 Worker 创建草稿。"
-        }</p>
+        <div>
+          <p>${
+            channel?.lastTestMessage
+              ? escapeHtml(channel.lastTestMessage)
+              : channel?.credentialStatus === "stored"
+                ? "凭据已由服务端加密保存，建议在发布前测试连接。"
+                : "配置 Halo 2.x Console API 与 PAT 后，可由服务端 Worker 创建草稿。"
+          }</p>
+          <small>最近测试：${formatDate(channel?.lastTestedAt)}</small>
+        </div>
       `;
       refs.haloTestButton.disabled =
         localOnly || channel?.credentialStatus !== "stored";
@@ -961,9 +988,15 @@
         localOnly || channel?.credentialStatus !== "stored";
       refs.haloForm.querySelector('button[type="submit"]').disabled =
         localOnly;
+      if (refs.haloUrlSafety?.dataset.state !== "error") {
+        refs.haloUrlSafety.dataset.state = "";
+        refs.haloUrlSafety.textContent =
+          "生产环境仅允许 HTTPS 公网地址；本地私网调试需由后端显式开启 ALLOW_PRIVATE_HALO_URLS。";
+      }
     }
 
     function openHaloDialog() {
+      if (refs.haloUrlSafety) refs.haloUrlSafety.dataset.state = "";
       updateHaloDialog();
       refs.haloDialog?.showModal();
     }
@@ -1278,16 +1311,57 @@
                   const editUrl = safeExternalUrl(task.remoteEditUrl);
                   const previewUrl = safeExternalUrl(task.remotePreviewUrl);
                   const publicUrl = safeExternalUrl(task.remotePublicUrl);
+                  const retryExhausted =
+                    Number(task.retryCount) >= Number(task.maxRetries || 3);
+                  const retryDisabled =
+                    task.status === "failed" &&
+                    (!task.retryable || retryExhausted);
+                  const retryReason = retryExhausted
+                    ? "已达到最大重试次数"
+                    : task.retryable
+                      ? ""
+                      : "该错误需要人工修复后重新发布";
+                  const eventTimeline = (task.events || []).length
+                    ? `
+                      <details class="task-event-timeline">
+                        <summary>查看执行时间线 · ${task.events.length} 条</summary>
+                        <ol>
+                          ${task.events
+                            .map(
+                              (event) => `
+                                <li>
+                                  <time>${formatDate(event.createdAt)}</time>
+                                  <div>
+                                    <strong>${escapeHtml(event.message)}</strong>
+                                    <small>${escapeHtml(event.type)}${
+                                      event.safeRemoteStatus
+                                        ? ` · ${escapeHtml(event.safeRemoteStatus)}`
+                                        : ""
+                                    }${
+                                      Number.isFinite(event.durationMs)
+                                        ? ` · ${event.durationMs} ms`
+                                        : ""
+                                    }</small>
+                                  </div>
+                                </li>
+                              `
+                            )
+                            .join("")}
+                        </ol>
+                      </details>
+                    `
+                    : "";
                   return `
                     <section class="remote-task-card">
                       <div>
                         <strong>${escapeHtml(version.platformName || version.platformId || "发布渠道")}</strong>
                         <small>${escapeHtml(version.title || batch.articleSnapshot?.title || "平台版本")}</small>
                       </div>
-                      <div>
-                        <span class="status-chip">${escapeHtml(task.remoteStatus || task.status)}</span>
-                        <small>Post Name: ${escapeHtml(task.remotePostName || "尚未创建")}</small>
-                      </div>
+                       <div>
+                         <span class="status-chip">${escapeHtml(task.remoteStatus || task.status)}</span>
+                         <small>Post Name: ${escapeHtml(task.remotePostName || "尚未创建")}</small>
+                         <small>幂等键: ${escapeHtml(task.idempotencyKey || "尚未生成")}</small>
+                       </div>
                       <div class="remote-task-links">
                         ${
                           editUrl
@@ -1304,18 +1378,30 @@
                             ? `<button type="button" data-copy-remote-url="${escapeHtml(publicUrl)}">复制公开链接</button>`
                             : ""
                         }
-                        ${
-                          task.status === "failed"
-                            ? `<button type="button" data-remote-task-retry="${escapeHtml(task.id)}">重试任务</button>`
-                            : ""
-                        }
-                      </div>
-                      ${
-                        task.errorMessage
-                          ? `<small class="is-danger">错误：${escapeHtml(task.errorMessage)} · 已重试 ${Number(task.retryCount) || 0} 次</small>`
-                          : `<small>草稿创建：${formatDate(task.draftCreatedAt)} · 发布：${formatDate(task.publishedAt)}</small>`
-                      }
-                    </section>
+                         ${
+                           task.status === "failed"
+                             ? `<button type="button" data-remote-task-retry="${escapeHtml(task.id)}" ${
+                                 retryDisabled ? "disabled" : ""
+                               } title="${escapeHtml(retryReason || "重试发布任务")}">重试任务</button>`
+                             : ""
+                         }
+                         ${
+                           task.errorMessage
+                             ? `<button type="button" data-copy-task-error="${escapeHtml(task.errorMessage)}">复制错误详情</button>`
+                             : ""
+                         }
+                       </div>
+                       ${
+                         task.errorMessage
+                           ? `<small class="is-danger">错误：${escapeHtml(task.errorMessage)} · 错误码 ${escapeHtml(task.lastErrorCode || "UNKNOWN")} · 已重试 ${Number(task.retryCount) || 0}/${Number(task.maxRetries) || 3} 次${
+                               task.nextRetryAt
+                                 ? ` · 建议重试 ${formatDate(task.nextRetryAt)}`
+                                 : ""
+                             }</small>`
+                           : `<small>草稿创建：${formatDate(task.draftCreatedAt)} · 发布：${formatDate(task.publishedAt)} · 耗时 ${Number(task.durationMs) || 0} ms</small>`
+                       }
+                       ${eventTimeline}
+                     </section>
                   `;
                 })
                 .join("");
@@ -1472,6 +1558,19 @@
         return;
       }
 
+      const copyTaskError = event.target.closest("[data-copy-task-error]");
+      if (copyTaskError) {
+        try {
+          await globalScope.navigator.clipboard.writeText(
+            copyTaskError.dataset.copyTaskError
+          );
+          showShellToast("错误详情已复制。");
+        } catch {
+          showShellToast("浏览器未允许复制，请手动选择错误详情。");
+        }
+        return;
+      }
+
       const retryRemote = event.target.closest("[data-remote-task-retry]");
       if (retryRemote) {
         retryRemote.disabled = true;
@@ -1592,14 +1691,28 @@
       }
       setHaloBusy(true);
       try {
+        const baseUrlError = validateHaloBaseUrl(
+          refs.haloForm.elements.namedItem("baseUrl").value
+        );
+        if (baseUrlError) {
+          refs.haloUrlSafety.dataset.state = "error";
+          refs.haloUrlSafety.textContent = baseUrlError;
+          refs.haloForm.elements.namedItem("baseUrl").focus();
+          return;
+        }
         const channel = await apiClient.connectHaloChannel(
           haloFormPayload()
         );
+        refs.haloUrlSafety.dataset.state = "";
         mergeHaloChannel(channel);
         updateHaloDialog();
         renderRoute();
         showShellToast("Halo 连接已保存，Token 已由服务端加密托管。");
       } catch (error) {
+        if (error.code === "UNSAFE_REMOTE_URL") {
+          refs.haloUrlSafety.dataset.state = "error";
+          refs.haloUrlSafety.textContent = error.message;
+        }
         showShellToast(error.message);
       } finally {
         setHaloBusy(false);

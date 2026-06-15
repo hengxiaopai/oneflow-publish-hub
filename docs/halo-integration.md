@@ -2,7 +2,7 @@
 
 更新日期：2026-06-15
 
-## Phase 6 状态
+## Phase 6.1 状态
 
 OneFlow 已实现第一条真实平台发布链路：自建 Blog / Halo。正式流程是：
 
@@ -17,6 +17,9 @@ OneFlow 已实现第一条真实平台发布链路：自建 Blog / Halo。正式
 ```
 
 浏览器不直接调用 Halo，也不会读取已保存 PAT。
+
+连接保存、连接测试和发布前都会执行 URL 安全检查。生产环境要求 HTTPS 公网地址；
+本地私有 Halo 只能在非生产环境显式设置 `ALLOW_PRIVATE_HALO_URLS=true`。
 
 ## Halo 2.25 接口
 
@@ -88,7 +91,14 @@ OneFlow 将 ArticleSnapshot 与 ChannelVersionSnapshot 集中映射为：
 | Connection refused | `HALO_UNREACHABLE` |
 | Network failure | `HALO_NETWORK_ERROR` |
 
+409 会为原 slug 追加稳定短 hash 并自动重试一次。timeout、网络和 5xx 会写入
+`retryable` 与 `nextRetryAt`；401/403、404 和 payload 错误不会自动重试。
+
 错误响应与任务结果不保存 Authorization Header、PAT 或原始响应头。
+
+真实验收命令见 [Halo Smoke Test](halo-smoke-test.md)，可靠性边界见
+[Publisher Reliability](publisher-reliability.md) 与
+[URL Safety And SSRF](url-safety-and-ssrf.md)。
 
 ## 过渡方案
 

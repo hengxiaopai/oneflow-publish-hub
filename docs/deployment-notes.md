@@ -23,8 +23,14 @@ Compose 只启动后端，前端继续通过 `npm run dev:frontend` 静态运行
   Session 设备管理和异常登录审计。
 - Mock Worker 与 API 同进程；生产需要独立队列、重试策略和幂等键。
 - 平台凭据应由 KMS 或 Secrets Manager 管理，不能只依赖单个环境变量密钥。
+- `ALLOW_PRIVATE_HALO_URLS` 在生产环境必须保持关闭，Halo URL 必须使用 HTTPS。
+- `HALO_REQUEST_TIMEOUT_MS` 默认 15000；应结合平台延迟和队列超时统一配置。
 - 前端与 API 应位于受控域名，生产 CORS 禁止 `*`。
 - 需要在网关层补 TLS、WAF、全局限流、日志汇聚与备份策略。
+
+Phase 6.1 已有进程内数据库锁、幂等键、重试元数据和事件日志；它们降低单进程重复
+执行风险，但不替代独立队列。多实例部署前应迁移到共享租约或队列，并限制 Publisher
+Worker 的出站网络，作为 SSRF 的第二道防线。
 
 详细步骤见 [PostgreSQL Migration](postgres-migration.md)。
 

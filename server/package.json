@@ -11,6 +11,7 @@
     "dev:fake-halo": "node scripts/fake-halo-server.js",
     "start": "node src/index.js",
     "test": "node scripts/run-tests.js",
+    "test:halo-smoke": "node scripts/halo-smoke-test.js",
     "prisma:generate": "prisma generate",
     "prisma:validate": "prisma validate",
     "prisma:validate:postgres": "prisma validate --config prisma.postgresql.config.ts",

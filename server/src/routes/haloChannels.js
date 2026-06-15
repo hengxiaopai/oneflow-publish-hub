@@ -109,6 +109,18 @@ export async function haloChannelRoutes(app) {
       },
     },
     async (request, reply) => {
+      const candidate = {
+        configuration: JSON.stringify(haloConfiguration(request.body)),
+      };
+      try {
+        await app.haloPublisher.validateRemoteUrl(candidate);
+      } catch (error) {
+        return reply.failure(
+          error.statusCode || 422,
+          error.code || "UNSAFE_REMOTE_URL",
+          error.message,
+        );
+      }
       const existing = await findHaloChannel(app, request.auth.workspaceId);
       if (!existing) {
         const context = await getWorkspaceEntitlementContext(

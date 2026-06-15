@@ -170,6 +170,7 @@ test("HTML declares every SaaS route surface and loads shell scripts after the w
   assert.match(html, /id="halo-connection-dialog"/);
   assert.match(html, /id="halo-connection-form"/);
   assert.match(html, /id="halo-pat-token"/);
+  assert.match(html, /id="halo-url-safety-message"/);
   assert.match(html, /id="test-halo-connection"/);
   assert.match(html, /id="clear-halo-credential"/);
   assert.match(html, /href="#\/dashboard"/);
@@ -181,4 +182,24 @@ test("HTML declares every SaaS route surface and loads shell scripts after the w
     html.indexOf('src="app.js?v=') <
       html.indexOf('src="saas-shell.js?v=1"')
   );
+});
+
+test("SaaS shell exposes Halo reliability feedback and task timelines", () => {
+  const source = fs.readFileSync(
+    path.join(__dirname, "..", "saas-shell.js"),
+    "utf8"
+  );
+  const styles = fs.readFileSync(
+    path.join(__dirname, "..", "styles.css"),
+    "utf8"
+  );
+
+  assert.match(source, /UNSAFE_REMOTE_URL/);
+  assert.match(source, /task\.retryable/);
+  assert.match(source, /task\.maxRetries/);
+  assert.match(source, /task\.events/);
+  assert.match(source, /task\.idempotencyKey/);
+  assert.match(source, /data-copy-task-error/);
+  assert.match(styles, /\.task-event-timeline/);
+  assert.match(styles, /button:disabled/);
 });

@@ -99,7 +99,14 @@ export async function publishRoutes(app) {
     async (request, reply) => {
       const batches = await app.prisma.publishBatch.findMany({
         where: { workspaceId: request.auth.workspaceId },
-        include: { tasks: { orderBy: { createdAt: "asc" } } },
+        include: {
+          tasks: {
+            include: {
+              events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+            },
+            orderBy: { createdAt: "asc" },
+          },
+        },
         orderBy: { createdAt: "desc" },
       });
       return reply.success(batches.map(batchView));

@@ -14,10 +14,13 @@ export async function createTestApp(config = {}, options = {}) {
       bodyLimit: 3 * 1024 * 1024,
       devSessionRateLimitMax: 20,
       publishRateLimitMax: 30,
+      allowPrivateHaloUrls: false,
+      haloRequestTimeoutMs: 15000,
       isTest: true,
       ...config,
     },
     logger: false,
+    resolveHaloHost: async () => [{ address: "93.184.216.34", family: 4 }],
     ...options,
   });
 }
@@ -26,6 +29,7 @@ export async function resetDatabase(app) {
   const prisma = app.prisma;
   await prisma.session.deleteMany();
   await prisma.authIdentity.deleteMany();
+  await prisma.publishTaskEvent?.deleteMany?.();
   await prisma.publishTask.deleteMany();
   await prisma.validationIssue?.deleteMany?.();
   await prisma.publishBatch.deleteMany();

@@ -1,5 +1,10 @@
 import { articleView } from "./articleService.js";
 import { channelView } from "./channelService.js";
+import { buildPublishIdempotencyKey } from "./publishIdempotencyService.js";
+import {
+  createPublishTaskEventService,
+  eventView,
+} from "./publishTaskEventService.js";
 
 function parseJson(value, fallback) {
   try {
@@ -41,7 +46,10 @@ function versionSnapshot(article, channel, existingVersion = null) {
     publishMethod:
       parseJson(channel.configuration, {}).publishMode || "create_draft",
     sourceArticleUpdatedAt: article.updatedAt,
-    createdAt: new Date().toISOString(),
+    createdAt:
+      existingVersion?.createdAt?.toISOString?.() ||
+      article.updatedAt?.toISOString?.() ||
+      article.updatedAt,
   };
 }
 
@@ -67,12 +75,22 @@ export function taskView(task) {
     lastSyncAt: task.lastSyncAt,
     rawResponseSummary: parseJson(task.rawResponseSummary, null),
     errorMessage: task.errorMessage,
+    lastErrorCode: task.lastErrorCode,
+    lastErrorMessage: task.lastErrorMessage,
+    retryable: task.retryable,
     retryCount: task.retryCount,
+    maxRetries: task.maxRetries,
+    nextRetryAt: task.nextRetryAt,
+    idempotencyKey: task.idempotencyKey
+      ? `${task.idempotencyKey.slice(0, 16)}...`
+      : null,
+    lockedAt: task.lockedAt,
     startedAt: task.startedAt,
     completedAt: task.completedAt,
     durationMs: task.durationMs,
     createdAt: task.createdAt,
     updatedAt: task.updatedAt,
+    events: (task.events || []).map(eventView),
   };
 }
 
@@ -97,12 +115,18 @@ export function createPublishService(prisma, publisherRouter) {
     return prisma.publishBatch.findFirst({
       where: { id: batchId, workspaceId },
       include: {
-        tasks: { orderBy: { createdAt: "asc" } },
+        tasks: {
+          include: {
+            events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+          },
+          orderBy: { createdAt: "asc" },
+        },
       },
     });
   }
 
   async function createBatch(workspaceId, input) {
+    const taskEvents = createPublishTaskEventService(prisma);
     const article = await prisma.article.findFirst({
       where: { id: input.articleId, workspaceId },
     });
@@ -182,16 +206,66 @@ export function createPublishService(prisma, publisherRouter) {
         },
       });
       snapshotValue.id = version.id;
-      await prisma.publishTask.create({
+      const idempotencyKey = buildPublishIdempotencyKey({
+        workspaceId,
+        channelConfigId: channel.id,
+        platformId: channel.platformId,
+        publishMode: snapshotValue.publishMethod,
+        articleSnapshot: snapshot,
+        channelVersionSnapshot: snapshotValue,
+      });
+      const previous = await prisma.publishTask.findFirst({
+        where: {
+          workspaceId,
+          idempotencyKey,
+          status: { in: ["draft_created", "published"] },
+        },
+        orderBy: { completedAt: "desc" },
+      });
+      const task = await prisma.publishTask.create({
         data: {
           workspaceId,
           publishBatchId: batch.id,
           channelConfigId: channel.id,
           channelVersionId: version.id,
-          status: "pending",
+          status: previous?.status || "pending",
+          idempotencyKey,
           channelVersionSnapshot: JSON.stringify(snapshotValue),
+          ...(previous
+            ? {
+                result: previous.result,
+                remoteUrl: previous.remoteUrl,
+                remotePostId: previous.remotePostId,
+                remotePostName: previous.remotePostName,
+                remoteEditUrl: previous.remoteEditUrl,
+                remotePreviewUrl: previous.remotePreviewUrl,
+                remotePublicUrl: previous.remotePublicUrl,
+                remoteStatus: previous.remoteStatus,
+                draftCreatedAt: previous.draftCreatedAt,
+                publishedAt: previous.publishedAt,
+                lastSyncAt: previous.lastSyncAt,
+                rawResponseSummary: previous.rawResponseSummary,
+                completedAt: new Date(),
+                durationMs: 0,
+              }
+            : {}),
         },
       });
+      await taskEvents.record(
+        task,
+        "task_created",
+        "发布任务已创建",
+        { channel: channel.displayName },
+      );
+      if (previous) {
+        await taskEvents.record(
+          task,
+          "idempotency_reused",
+          "检测到相同发布快照，已复用历史远程结果",
+          { sourceTaskId: previous.id, remoteStatus: previous.remoteStatus },
+          { safeRemoteStatus: previous.remoteStatus },
+        );
+      }
     }
 
     await prisma.usageRecord.create({
@@ -213,18 +287,33 @@ export function createPublishService(prisma, publisherRouter) {
       where: { id: taskId, workspaceId },
     });
     if (!task) return { error: "TASK_NOT_FOUND" };
-    if (task.status !== "failed") return { error: "TASK_NOT_RETRYABLE" };
+    if (
+      task.status !== "failed" ||
+      !task.retryable ||
+      task.retryCount >= task.maxRetries
+    ) {
+      return { error: "TASK_NOT_RETRYABLE" };
+    }
     await prisma.publishTask.update({
       where: { id: task.id },
       data: {
         status: "retrying",
         retryCount: { increment: 1 },
         errorMessage: null,
+        lastErrorCode: null,
+        lastErrorMessage: null,
+        retryable: false,
+        nextRetryAt: null,
       },
     });
     await publisherRouter.runTask(task.id);
     return {
-      task: await prisma.publishTask.findUnique({ where: { id: task.id } }),
+      task: await prisma.publishTask.findUnique({
+        where: { id: task.id },
+        include: {
+          events: { orderBy: [{ createdAt: "asc" }, { id: "asc" }] },
+        },
+      }),
     };
   }
 

@@ -8,6 +8,9 @@ import {
 } from "../src/services/publishers/haloPublisherService.js";
 
 const encryptionKey = "oneflow-test-encryption-key-not-for-production";
+const resolvePublicTestHost = async () => [
+  { address: "93.184.216.34", family: 4 },
+];
 
 function channel(overrides = {}) {
   return {
@@ -56,6 +59,7 @@ test("Halo config validation and URL building use configurable endpoints", () =>
   const service = createHaloPublisherService({
     encryptionKey,
     fetchImpl: async () => new Response(),
+    resolveHost: resolvePublicTestHost,
   });
   assert.deepEqual(service.validateConfig(channel()), { ok: true, issues: [] });
   assert.equal(
@@ -84,6 +88,7 @@ test("Halo payload mapping follows PostRequest and keeps Markdown source", () =>
   const service = createHaloPublisherService({
     encryptionKey,
     fetchImpl: async () => new Response(),
+    resolveHost: resolvePublicTestHost,
   });
   const { article, version } = snapshots();
   const payload = service.mapArticleToHaloPayload(article, version, channel());
@@ -106,6 +111,7 @@ test("Halo fake HTTP creates a draft then publishes it without exposing PAT", as
   const calls = [];
   const service = createHaloPublisherService({
     encryptionKey,
+    resolveHost: resolvePublicTestHost,
     fetchImpl: async (url, options) => {
       calls.push({ url, options });
       if (options.method === "POST") {
@@ -152,6 +158,7 @@ test("Halo fake HTTP creates a draft then publishes it without exposing PAT", as
 test("Halo draft creation rejects responses without a Post Name", async () => {
   const service = createHaloPublisherService({
     encryptionKey,
+    resolveHost: resolvePublicTestHost,
     fetchImpl: async () =>
       Response.json({
         status: { phase: "DRAFT" },

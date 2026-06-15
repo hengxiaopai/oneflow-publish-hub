@@ -728,6 +728,9 @@
               placeholder="https://blog.example.com"
               required
             />
+            <small id="halo-url-safety-message">
+              生产环境仅允许 HTTPS 公网地址；本地私网调试需由后端显式开启 ALLOW_PRIVATE_HALO_URLS。
+            </small>
           </label>
           <label class="is-wide">
             <span>Console API Endpoint</span>
@@ -809,7 +812,9 @@
           >
             测试连接
           </button>
-          <button class="primary-button" type="submit">保存连接</button>
+          <button class="primary-button" id="save-halo-connection" type="submit">
+            保存连接
+          </button>
         </footer>
       </form>
     </dialog>

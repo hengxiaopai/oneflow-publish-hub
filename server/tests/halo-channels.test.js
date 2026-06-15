@@ -77,6 +77,36 @@ test("owner connects Halo with encrypted PAT and redacted API responses", async 
   assert.equal(stored.encryptedCredential.includes("pat_halo_secret"), false);
 });
 
+test("Halo connection rejects private and metadata targets before storage", async () => {
+  const session = await startSession(app, "unsafe-halo-url");
+  for (const baseUrl of [
+    "http://127.0.0.1:8090",
+    "http://169.254.169.254/latest/meta-data",
+  ]) {
+    const response = await app.inject({
+      method: "POST",
+      url: "/api/channels/halo/connect",
+      headers: session.headers,
+      payload: {
+        displayName: "Unsafe Halo",
+        baseUrl,
+        consoleApiEndpoint: "/apis/api.console.halo.run/v1alpha1",
+        credential: "pat_halo_secret",
+        publishMode: "draft",
+      },
+    });
+    assert.equal(response.statusCode, 422);
+    assert.equal(response.json().error.code, "UNSAFE_REMOTE_URL");
+  }
+
+  assert.equal(
+    await app.prisma.channelConfig.count({
+      where: { workspaceId: session.body.data.workspace.id },
+    }),
+    0,
+  );
+});
+
 test("editor and viewer cannot change Halo credentials", async () => {
   for (const role of ["editor", "viewer"]) {
     const session = await startSession(app, `halo-${role}`);

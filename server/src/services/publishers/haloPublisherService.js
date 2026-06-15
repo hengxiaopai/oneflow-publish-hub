@@ -1,6 +1,7 @@
 import { createRequire } from "node:module";
 
 import { decryptCredential } from "../credentialService.js";
+import { assertSafeRemoteUrl } from "../urlSafetyService.js";
 
 const require = createRequire(import.meta.url);
 const { sanitizeHtml } = require("../../../../sanitizer.js");
@@ -129,7 +130,7 @@ export function normalizeHaloError(error) {
 }
 
 function toServiceError(error) {
-  if (error?.code?.startsWith("HALO_") && error?.statusCode) return error;
+  if (error?.code && error?.statusCode) return error;
   const normalized = normalizeHaloError(error);
   return Object.assign(new Error(normalized.message), normalized, {
     cause: error,
@@ -140,6 +141,9 @@ export function createHaloPublisherService({
   encryptionKey,
   fetchImpl = globalThis.fetch,
   timeoutMs = 15000,
+  nodeEnv = "development",
+  allowPrivateHaloUrls = false,
+  resolveHost,
 } = {}) {
   function validateConfig(channelConfig) {
     const settings = channelSettings(channelConfig);
@@ -216,6 +220,7 @@ export function createHaloPublisherService({
     articleSnapshot,
     channelVersionSnapshot,
     channelConfig,
+    options = {},
   ) {
     const article = parseJson(articleSnapshot, {});
     const version = parseJson(channelVersionSnapshot, {});
@@ -248,7 +253,7 @@ export function createHaloPublisherService({
         ? ""
         : version.cover?.url || article.cover?.url || "";
     const slug =
-      version.slug || article.slug || slugify(title);
+      options.slugOverride || version.slug || article.slug || slugify(title);
     const spec = {
       title: String(title).trim(),
       slug,
@@ -301,6 +306,7 @@ export function createHaloPublisherService({
   }
 
   async function request(channelConfig, path, options = {}) {
+    await validateRemoteUrl(channelConfig);
     const token = credential(channelConfig);
     const controller = new AbortController();
     const timer = setTimeout(() => controller.abort(), timeoutMs);
@@ -330,6 +336,15 @@ export function createHaloPublisherService({
     }
   }
 
+  async function validateRemoteUrl(channelConfig) {
+    const baseUrl = publicBaseUrl(channelConfig);
+    return assertSafeRemoteUrl(baseUrl, {
+      nodeEnv,
+      allowPrivateHaloUrls,
+      ...(resolveHost ? { resolveHost } : {}),
+    });
+  }
+
   function remoteResult(response, channelConfig, status) {
     const baseUrl = publicBaseUrl(channelConfig);
     const name = response?.metadata?.name || null;
@@ -347,7 +362,7 @@ export function createHaloPublisherService({
     };
   }
 
-  async function createDraft(task, channelConfig) {
+  async function createDraft(task, channelConfig, options = {}) {
     const configValidation = validateConfig(channelConfig);
     if (!configValidation.ok) {
       const error = Object.assign(new Error(configValidation.issues[0].message), {
@@ -368,7 +383,12 @@ export function createHaloPublisherService({
       });
       throw error;
     }
-    const payload = mapArticleToHaloPayload(article, version, channelConfig);
+    const payload = mapArticleToHaloPayload(
+      article,
+      version,
+      channelConfig,
+      options,
+    );
     const response = await request(channelConfig, "/posts", {
       method: "POST",
       body: JSON.stringify(payload),
@@ -405,5 +425,6 @@ export function createHaloPublisherService({
     testConnection,
     validateConfig,
     validatePayload,
+    validateRemoteUrl,
   };
 }
