@@ -1,6 +1,15 @@
 # Security Model
 
-更新日期：2026-06-14
+更新日期：2026-06-15
+
+## 账号与 Session
+
+- 密码使用 Argon2id，明文不落库、不进日志。
+- Session 原始 token 只存在于 httpOnly Cookie，数据库只保存 HMAC hash。
+- Cookie 使用 `SameSite=Lax`；生产环境 `Secure=true`。
+- Session 每次请求重新校验 WorkspaceMember，成员移除后立即失效。
+- 登录与注册应用独立 rate limit，错误不暴露邮箱是否存在。
+- `password`、Cookie、Session、Token 与 credential 路径全部进入日志脱敏列表。
 
 ## Token 加密保存
 

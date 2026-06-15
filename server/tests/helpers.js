@@ -23,6 +23,8 @@ export async function createTestApp(config = {}) {
 
 export async function resetDatabase(app) {
   const prisma = app.prisma;
+  await prisma.session.deleteMany();
+  await prisma.authIdentity.deleteMany();
   await prisma.publishTask.deleteMany();
   await prisma.publishBatch.deleteMany();
   await prisma.channelVersion.deleteMany();
@@ -34,7 +36,7 @@ export async function resetDatabase(app) {
   await prisma.workspaceMember.deleteMany();
   await prisma.workspace.deleteMany();
   await prisma.user.deleteMany();
-  app.sessionService.clear();
+  await app.sessionService.clear();
 }
 
 export async function startSession(app, profileKey = "default") {

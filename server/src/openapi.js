@@ -14,10 +14,10 @@ export function createOpenApiDocument(config) {
   return {
     openapi: "3.1.0",
     info: {
-      title: "OneFlow SaaS Development API",
-      version: "0.2.0",
+      title: "OneFlow SaaS API",
+      version: "0.3.0",
       description:
-        "Phase 4.1 local development API. Dev session is not production authentication.",
+        "Phase 5 API with password authentication, persistent cookie sessions, workspace tenancy, RBAC, and development-only dev sessions.",
     },
     servers: [{ url: `http://${config.host}:${config.port}` }],
     tags: [
@@ -27,10 +27,13 @@ export function createOpenApiDocument(config) {
       { name: "Channels" },
       { name: "Publish" },
       { name: "Usage" },
+      { name: "AI" },
     ],
     paths: {
       "/api/dev/session": { post: { tags: ["Auth"], responses: { 201: { description: "Development session created" } } } },
-      "/api/auth/me": { get: { tags: ["Auth"], responses: { 200: { description: "Current development user" } } } },
+      "/api/auth/register": { post: { tags: ["Auth"], responses: { 201: { description: "Account and owner workspace created" } } } },
+      "/api/auth/login": { post: { tags: ["Auth"], responses: { 200: { description: "Cookie session created" } } } },
+      "/api/auth/me": { get: { tags: ["Auth"], responses: { 200: { description: "Current user and workspace" } } } },
       "/api/auth/logout": { post: { tags: ["Auth"], responses: { 200: { description: "Session cleared" } } } },
       "/api/workspaces": { get: { tags: ["Workspace"], responses: { 200: { description: "Accessible workspaces" } } } },
       "/api/workspaces/current": { get: { tags: ["Workspace"], responses: { 200: { description: "Current workspace" } } } },
@@ -56,10 +59,17 @@ export function createOpenApiDocument(config) {
       "/api/publish-batches/{id}": { get: { tags: ["Publish"], responses: { 200: { description: "Batch detail" } } } },
       "/api/publish-tasks/{id}/retry": { post: { tags: ["Publish"], responses: { 202: { description: "Retry accepted" } } } },
       "/api/usage": { get: { tags: ["Usage"], responses: { 200: { description: "Workspace usage" } } } },
+      "/api/ai-capabilities": { get: { tags: ["AI"], responses: { 200: { description: "Workspace AI capability definitions" } } } },
+      "/api/ai-capabilities/{id}/run": { post: { tags: ["AI"], responses: { 501: { description: "Provider integration intentionally unavailable in Phase 5" } } } },
     },
     components: {
       schemas: { SuccessEnvelope: successEnvelope },
       securitySchemes: {
+        cookieSession: {
+          type: "apiKey",
+          in: "cookie",
+          name: "oneflow_session",
+        },
         devSession: {
           type: "apiKey",
           in: "header",

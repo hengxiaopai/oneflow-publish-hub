@@ -10,6 +10,8 @@ test("Prisma schema defines the Phase 4 SaaS models and tenant snapshots", async
     "User",
     "Workspace",
     "WorkspaceMember",
+    "Session",
+    "AuthIdentity",
     "Article",
     "ChannelConfig",
     "ChannelVersion",
@@ -24,7 +26,9 @@ test("Prisma schema defines the Phase 4 SaaS models and tenant snapshots", async
     assert.match(schema, new RegExp(`model ${model} \\{`));
   }
 
-  for (const model of models.slice(2)) {
+  for (const model of models.filter(
+    (name) => !["User", "Workspace", "AuthIdentity"].includes(name),
+  )) {
     const block = schema.match(new RegExp(`model ${model} \\{([\\s\\S]*?)\\n\\}`));
     assert.ok(block, `missing ${model}`);
     assert.match(block[1], /\bworkspaceId\s+String\b/);
@@ -34,4 +38,7 @@ test("Prisma schema defines the Phase 4 SaaS models and tenant snapshots", async
   assert.match(schema, /channelVersionSnapshot\s+String/);
   assert.match(schema, /encryptedCredential\s+String\?/);
   assert.match(schema, /credentialStatus\s+String/);
+  assert.match(schema, /passwordHash\s+String\?/);
+  assert.match(schema, /tokenHash\s+String/);
+  assert.match(schema, /plan\s+String\s+@default\("free"\)/);
 });

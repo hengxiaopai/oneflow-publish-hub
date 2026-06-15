@@ -11,6 +11,10 @@ export function loadConfig(overrides = {}) {
       ? overrides.corsOrigin.join(",")
       : overrides.corsOrigin ?? process.env.CORS_ORIGIN,
     SESSION_SECRET: overrides.sessionSecret ?? process.env.SESSION_SECRET,
+    SESSION_COOKIE_NAME:
+      overrides.sessionCookieName ?? process.env.SESSION_COOKIE_NAME,
+    SESSION_TTL_HOURS:
+      overrides.sessionTtlHours ?? process.env.SESSION_TTL_HOURS,
   });
 
   return {
@@ -26,6 +30,9 @@ export function loadConfig(overrides = {}) {
       overrides.publishRateLimitMax ??
         process.env.PUBLISH_RATE_LIMIT_MAX ??
         30,
+    ),
+    authRateLimitMax: Number(
+      overrides.authRateLimitMax ?? process.env.AUTH_RATE_LIMIT_MAX ?? 12,
     ),
     isTest: overrides.isTest ?? parsed.isTest,
   };

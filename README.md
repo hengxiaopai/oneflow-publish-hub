@@ -3,11 +3,10 @@
 OneFlow 是面向 AI 内容创作者的“一文多发发布中枢”。它将文章编辑、AI
 分析、多平台适配、人工确认、授权检查、批量发布和数据回流组织在同一工作台中。
 
-当前阶段为 **Phase 4.1，前后端分离 SaaS MVP 工程化收口**。Vanilla JS 工作台保持不变，
-新增 Fastify API、Prisma、SQLite、本地 dev session、服务端套餐校验、凭据加密字段
-与后端 Mock Publisher Worker，并补齐统一 API 契约、环境校验、Seed、OpenAPI、
-Docker Compose 和 GitHub Actions。项目不包含真实平台 API Token、Cookie、账号凭证
-或支付密钥。
+当前阶段为 **Phase 5，真实认证与 Workspace 多租户基础**。Vanilla JS 工作台保持不变，
+后端新增 Argon2id 密码注册/登录、httpOnly Cookie、数据库 Session、Workspace RBAC、
+服务端套餐校验，以及 SQLite 开发与 PostgreSQL 生产 schema。项目不包含真实平台
+API Token、第三方账号凭证或支付密钥。
 
 ![OneFlow 桌面工作台](docs/screenshots/phase-2-5-desktop-1440.png)
 
@@ -32,6 +31,10 @@ Docker Compose 和 GitHub Actions。项目不包含真实平台 API Token、Cook
 - Workspace 隔离的 Fastify API 与 Prisma 数据模型。
 - 服务端 Entitlement 校验和不回传凭据的 ChannelConfig。
 - 后端 Mock Worker 成功、失败、结果回写与重试链路。
+- 密码注册/登录、持久 Session、退出登录与刷新恢复登录态。
+- Owner/Admin/Editor/Viewer 服务端 RBAC。
+- Workspace.plan 驱动的服务端 Entitlement。
+- SQLite 本地 schema 与 PostgreSQL 兼容 schema 双校验。
 
 ## 产品工作流
 
@@ -63,6 +66,8 @@ Docker Compose 和 GitHub Actions。项目不包含真实平台 API Token、Cook
 - Fastify
 - Prisma
 - SQLite
+- PostgreSQL-compatible Prisma schema
+- Argon2id
 - AES-256-GCM 本地凭据加密
 
 前端不依赖框架或外部付费素材。Local Demo Mode 不依赖后端；SaaS Dev Mode 使用
@@ -98,13 +103,24 @@ npm run dev:server
 
 - **Local Demo Mode**：使用 `localStorage`，后端未启动也可用。
 - **SaaS Dev Mode**：调用本地 API、SQLite 与后端 Mock Worker。
-- **SaaS 云端模式**：只显示认证占位，不收集账号密码，也不调用假登录接口。
+- **SaaS Auth Mode**：真实注册/登录，Session 仅通过 httpOnly Cookie 管理。
+
+需要 Seed 一个可登录的本地演示账号时，只在 `server/.env` 配置：
+
+```text
+DEMO_USER_EMAIL=creator@example.test
+DEMO_USER_NAME=OneFlow Creator
+DEMO_USER_PASSWORD=replace-with-a-local-password
+```
+
+然后执行 `npm run db:seed`。仓库不会硬编码或提交演示密码。
 
 后端未启动或请求超时时，顶部状态会显示 API 不可用，登录页给出“可切换到本地开发
 模式”的明确提示，不影响 Local Demo Mode。
 
 完整说明见 [Backend Setup](docs/backend-setup.md) 和
-[Development Workflow](docs/development-workflow.md)。
+[Development Workflow](docs/development-workflow.md)。生产数据库切换见
+[PostgreSQL Migration](docs/postgres-migration.md)。
 
 ### Docker 后端
 
@@ -155,7 +171,9 @@ python "$env:CODEX_HOME\skills\.system\skill-creator\scripts\quick_validate.py" 
 
 - Local Demo 工作区数据保存在当前浏览器的 `localStorage` 中。
 - SaaS Dev 数据保存在本地 SQLite，并由 `workspaceId` 隔离。
-- Phase 4 dev session 保存在后端内存中，不是生产认证。
+- Phase 5 的真实账号与 Dev Session 均持久化在数据库；Dev Session 仅开发环境可用。
+- 密码使用 Argon2id；Session 原始 token 不落库，数据库只保存 hash。
+- Cookie 使用 `HttpOnly`、`SameSite=Lax`，生产环境启用 `Secure`。
 - 本地开发模式标记仅保存在 `sessionStorage`，不代表真实登录 Session。
 - 当前 schema key 为 `oneflow.workspace.v3`，兼容迁移 v1 和 v2。
 - 正文会在编辑、恢复、导入和生成发布快照时执行白名单过滤。
@@ -183,7 +201,6 @@ python "$env:CODEX_HOME\skills\.system\skill-creator\scripts\quick_validate.py" 
 
 ## 当前限制
 
-- 本地 dev session 是内存实现，后端重启后失效，不是生产认证。
 - SQLite 和进程内 Mock Worker 只适合单机开发。
 - Billing、对象存储、独立队列、实时事件和真实平台 API 尚未接入。
 - 所有发布结果仍为 Mock，不会向第三方平台发送内容。
@@ -191,7 +208,8 @@ python "$env:CODEX_HOME\skills\.system\skill-creator\scripts\quick_validate.py" 
 - `localStorage` 容量有限，不适合图片、视频或大规模版本历史。
 - 多标签页同时编辑采用最后写入覆盖，尚无冲突合并。
 - sanitizer 是本地 MVP 的最小防线，接入后端后仍需服务端再次过滤。
-- 当前没有生产用户系统、OAuth、持久 Session、Durable Queue 或数据分析后端。
+- 当前没有邮箱验证、密码重置、MFA、OAuth、Durable Queue 或数据分析后端。
+- 生产 PostgreSQL migration 已有兼容 schema，但仍需在目标环境生成并演练。
 
 ## Halo 方案边界
 
@@ -215,8 +233,8 @@ SaaS 后，该设计已被服务端发布器方案取代：
 - **Phase 3S**：SaaS 产品壳、权限、后端 API 与服务端发布器架构。
 - **Phase 4**：Fastify、Prisma、SQLite、dev session、服务端 Entitlement 与 Mock Worker。
 - **Phase 4.1**：统一 API 契约、环境校验、Seed、OpenAPI、Docker 与 CI。
-- **Phase 4.5**：PostgreSQL、生产认证、独立队列和对象存储。
-- **Phase 5**：第三方平台半自动适配与 API 发布器。
+- **Phase 5**：密码认证、持久 Session、Workspace 多租户、RBAC 与 PostgreSQL 兼容。
+- **Phase 5.5**：独立队列、对象存储与第三方平台半自动适配。
 - **Phase 5.5**：浏览器自动化发布实验。
 - **Phase 6**：数据回流与复盘分析。
 
@@ -246,6 +264,10 @@ SaaS 后，该设计已被服务端发布器方案取代：
 - [套餐与权限](docs/pricing-entitlement-model.md)
 - [后端 API 草案](docs/backend-api-design.md)
 - [后端本地运行](docs/backend-setup.md)
+- [认证设计](docs/auth-design.md)
+- [Workspace 多租户](docs/workspace-multitenancy.md)
+- [RBAC 模型](docs/rbac-model.md)
+- [PostgreSQL 迁移](docs/postgres-migration.md)
 - [服务端 Token 安全](docs/server-token-security.md)
 - [安全模型](docs/security-model.md)
 - [服务端发布器设计](docs/server-side-publisher-design.md)

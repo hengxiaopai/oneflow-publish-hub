@@ -42,6 +42,15 @@ export function parseEnvironment(source = process.env) {
   const databaseUrl = requiredString(source, "DATABASE_URL", issues);
   const encryptionKey = secret(source.ENCRYPTION_KEY, "ENCRYPTION_KEY", issues);
   const sessionSecret = secret(source.SESSION_SECRET, "SESSION_SECRET", issues);
+  const sessionCookieName =
+    String(source.SESSION_COOKIE_NAME || "oneflow_session").trim() ||
+    "oneflow_session";
+  const sessionTtlHours = positiveInteger(
+    source.SESSION_TTL_HOURS,
+    "SESSION_TTL_HOURS",
+    issues,
+    168,
+  );
   const corsValue = requiredString(source, "CORS_ORIGIN", issues);
   const corsOrigin = corsValue
     .split(",")
@@ -59,6 +68,8 @@ export function parseEnvironment(source = process.env) {
     databaseUrl,
     encryptionKey,
     sessionSecret,
+    sessionCookieName,
+    sessionTtlHours,
     corsOrigin,
     isTest: nodeEnv === "test",
   };

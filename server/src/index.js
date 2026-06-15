@@ -1,9 +1,11 @@
 import Fastify from "fastify";
+import cookie from "@fastify/cookie";
 import { pathToFileURL } from "node:url";
 import { loadConfig } from "./config.js";
 import { createPrismaClient } from "./db.js";
 import { registerResponseHelpers } from "./http/response.js";
 import { createAuthMiddleware } from "./middleware/auth.js";
+import { createRoleGuard } from "./services/rbacService.js";
 import { registerErrorHandler } from "./middleware/errorHandler.js";
 import {
   LOGGER_REDACT_PATHS,
@@ -17,7 +19,9 @@ import { workspaceRoutes } from "./routes/workspaces.js";
 import { channelRoutes } from "./routes/channels.js";
 import { publishRoutes } from "./routes/publish.js";
 import { usageRoutes } from "./routes/usage.js";
+import { aiCapabilityRoutes } from "./routes/aiCapabilities.js";
 import { createSessionService } from "./services/sessionService.js";
+import { createAuthService } from "./services/authService.js";
 import { createMockPublisherService } from "./services/mockPublisherService.js";
 import { createPublishService } from "./services/publishService.js";
 
@@ -37,21 +41,30 @@ export async function buildApp(options = {}) {
           }),
   });
   const prisma = options.prisma || createPrismaClient(config.databaseUrl);
-  const sessionService = createSessionService(prisma, config.sessionSecret);
+  const sessionService = createSessionService(prisma, {
+    sessionSecret: config.sessionSecret,
+    sessionTtlHours: config.sessionTtlHours,
+  });
+  const authService = createAuthService(prisma, sessionService);
   const mockPublisher = createMockPublisherService(prisma);
   const publishService = createPublishService(prisma, mockPublisher);
 
   app.decorate("config", config);
   app.decorate("prisma", prisma);
   app.decorate("sessionService", sessionService);
+  app.decorate("authService", authService);
   app.decorate("mockPublisher", mockPublisher);
   app.decorate("publishService", publishService);
-  app.decorate("authenticate", createAuthMiddleware(sessionService));
+  app.decorate("authenticate", createAuthMiddleware(sessionService, config));
+  app.decorate("requireEditor", createRoleGuard("editor"));
+  app.decorate("requireAdmin", createRoleGuard("admin"));
+  app.decorate("requireOwner", createRoleGuard("owner"));
   app.decorateRequest("auth", null);
   registerResponseHelpers(app);
   registerRequestLogger(app);
   registerErrorHandler(app);
 
+  await app.register(cookie);
   await registerSecurity(app, config);
 
   await app.register(
@@ -63,6 +76,7 @@ export async function buildApp(options = {}) {
       await api.register(channelRoutes);
       await api.register(publishRoutes);
       await api.register(usageRoutes);
+      await api.register(aiCapabilityRoutes);
     },
     { prefix: "/api" },
   );

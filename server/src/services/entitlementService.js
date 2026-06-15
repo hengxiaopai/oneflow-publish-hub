@@ -122,14 +122,17 @@ export function canSchedulePublish(context) {
 export async function getWorkspaceEntitlementContext(prisma, workspaceId) {
   const period = new Date().toISOString().slice(0, 7);
   const [
-    subscription,
+    workspace,
     articles,
     connectedChannels,
     publishBatches,
     members,
     aiUsage,
   ] = await Promise.all([
-    prisma.subscription.findUnique({ where: { workspaceId } }),
+    prisma.workspace.findUnique({
+      where: { id: workspaceId },
+      select: { plan: true },
+    }),
     prisma.article.count({ where: { workspaceId } }),
     prisma.channelConfig.count({
       where: {
@@ -153,7 +156,7 @@ export async function getWorkspaceEntitlementContext(prisma, workspaceId) {
   ]);
 
   return {
-    planId: subscription?.planId || "free",
+    planId: workspace?.plan || "free",
     period,
     usage: {
       articles,
@@ -166,3 +169,13 @@ export async function getWorkspaceEntitlementContext(prisma, workspaceId) {
 }
 
 export { PLAN_LIMITS };
+
+export function entitlementErrorDetails(decision, capability) {
+  return {
+    capability,
+    reason: decision.reason,
+    limit: decision.limit ?? null,
+    used: decision.used ?? null,
+    remaining: decision.remaining ?? null,
+  };
+}

@@ -108,7 +108,8 @@ test("Free plan prevents connecting more than two channels", async () => {
     displayName: "第三渠道",
   });
   assert.equal(blocked.statusCode, 403);
-  assert.equal(blocked.json().error.code, "CHANNEL_LIMIT_REACHED");
+  assert.equal(blocked.json().error.code, "ENTITLEMENT_LIMIT_EXCEEDED");
+  assert.equal(blocked.json().error.details.reason, "CHANNEL_LIMIT_REACHED");
 });
 
 test("channels remain isolated between workspaces", async () => {

@@ -1,6 +1,7 @@
 import { articleData, articleView } from "../services/articleService.js";
 import {
   canCreateArticle,
+  entitlementErrorDetails,
   getWorkspaceEntitlementContext,
 } from "../services/entitlementService.js";
 
@@ -38,7 +39,7 @@ export async function articleRoutes(app) {
   app.post(
     "/articles",
     {
-      preHandler: app.authenticate,
+      preHandler: [app.authenticate, app.requireEditor],
       schema: {
         body: {
           type: "object",
@@ -57,8 +58,9 @@ export async function articleRoutes(app) {
       if (!decision.allowed) {
         return reply.failure(
           403,
-          decision.reason,
+          "ENTITLEMENT_LIMIT_EXCEEDED",
           "当前套餐的文章数量额度已用完。",
+          entitlementErrorDetails(decision, "canCreateArticle"),
         );
       }
       const article = await app.prisma.article.create({
@@ -90,7 +92,7 @@ export async function articleRoutes(app) {
   app.put(
     "/articles/:id",
     {
-      preHandler: app.authenticate,
+      preHandler: [app.authenticate, app.requireEditor],
       schema: {
         body: {
           type: "object",
@@ -118,7 +120,7 @@ export async function articleRoutes(app) {
 
   app.delete(
     "/articles/:id",
-    { preHandler: app.authenticate },
+    { preHandler: [app.authenticate, app.requireEditor] },
     async (request, reply) => {
       const existing = await app.prisma.article.findFirst({
         where: {

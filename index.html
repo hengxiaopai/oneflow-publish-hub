@@ -53,7 +53,7 @@
           <article>
             <span class="mode-label">OneFlow Cloud</span>
             <h2>SaaS 云端模式</h2>
-            <p>未来将支持账号、团队、服务端发布器、套餐与跨设备同步。</p>
+            <p>使用真实账号与服务端工作区；团队、OAuth 与跨设备同步仍在后续阶段。</p>
             <button class="secondary-button" id="show-cloud-placeholder" type="button">
               登录 / 注册
             </button>
@@ -61,8 +61,26 @@
         </div>
         <div class="saas-dev-status" id="saas-dev-status" role="status" hidden></div>
         <div class="cloud-auth-placeholder" id="cloud-auth-placeholder" hidden>
-          <strong>云端认证尚未接入</strong>
-          <p>当前版本不会收集账号或密码。正式认证将由后端 Session 服务提供。</p>
+          <div class="auth-mode-switch" role="tablist" aria-label="账号入口">
+            <button id="auth-mode-login" type="button" class="is-active" role="tab" aria-selected="true">登录</button>
+            <button id="auth-mode-register" type="button" role="tab" aria-selected="false">注册</button>
+          </div>
+          <form id="saas-auth-form">
+            <label class="auth-name-field" hidden>
+              <span>你的名字</span>
+              <input name="name" autocomplete="name" maxlength="100" placeholder="内容创作者" />
+            </label>
+            <label>
+              <span>邮箱</span>
+              <input name="email" type="email" autocomplete="email" maxlength="320" required placeholder="creator@example.com" />
+            </label>
+            <label>
+              <span>密码</span>
+              <input name="password" type="password" autocomplete="current-password" minlength="10" maxlength="256" required placeholder="至少 10 位" />
+            </label>
+            <button class="primary-button auth-submit" type="submit">登录 OneFlow</button>
+          </form>
+          <p class="auth-boundary-note">账号会话由后端通过 httpOnly Cookie 管理，浏览器脚本无法读取会话令牌。</p>
         </div>
       </div>
     </section>

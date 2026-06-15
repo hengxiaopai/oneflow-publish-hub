@@ -19,6 +19,7 @@ export async function registerSecurity(app, config) {
     methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
     allowedHeaders: ["content-type", "x-oneflow-dev-session"],
     exposedHeaders: ["x-request-id"],
+    credentials: true,
   });
 
   await app.register(rateLimit, {

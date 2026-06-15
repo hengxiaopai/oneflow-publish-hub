@@ -1,5 +1,6 @@
 import { pathToFileURL } from "node:url";
 import { createPrismaClient } from "../src/db.js";
+import { hashPassword } from "../src/services/passwordService.js";
 
 const CAPABILITIES = [
   ["title_generation", "标题生成", "free"],
@@ -39,24 +40,62 @@ const CHANNELS = [
 ];
 
 export async function seedDatabase(prisma) {
+  const demoEmail = String(process.env.DEMO_USER_EMAIL || "")
+    .trim()
+    .toLowerCase();
+  const demoName =
+    String(process.env.DEMO_USER_NAME || "").trim() || "OneFlow 开发者";
+  const demoPassword = String(process.env.DEMO_USER_PASSWORD || "");
+  const passwordHash = demoPassword
+    ? await hashPassword(demoPassword)
+    : undefined;
   const user = await prisma.user.upsert({
     where: { devProfileKey: "seed-dev-user" },
-    update: { displayName: "OneFlow 开发者" },
+    update: {
+      name: demoName,
+      ...(demoEmail ? { email: demoEmail } : {}),
+      ...(passwordHash ? { passwordHash } : {}),
+    },
     create: {
       id: "seed-user-oneflow",
       devProfileKey: "seed-dev-user",
-      displayName: "OneFlow 开发者",
+      email: demoEmail || null,
+      name: demoName,
+      passwordHash,
     },
   });
   const workspace = await prisma.workspace.upsert({
     where: { slug: "oneflow-dev-workspace" },
-    update: { name: "OneFlow 开发工作区" },
+    update: {
+      name: "OneFlow 开发工作区",
+      ownerId: user.id,
+      plan: "free",
+    },
     create: {
       id: "seed-workspace-oneflow",
       slug: "oneflow-dev-workspace",
       name: "OneFlow 开发工作区",
+      ownerId: user.id,
+      plan: "free",
     },
   });
+
+  if (demoEmail && passwordHash) {
+    await prisma.authIdentity.upsert({
+      where: {
+        userId_provider: {
+          userId: user.id,
+          provider: "password",
+        },
+      },
+      update: { providerUserId: demoEmail },
+      create: {
+        userId: user.id,
+        provider: "password",
+        providerUserId: demoEmail,
+      },
+    });
+  }
 
   await prisma.workspaceMember.upsert({
     where: {

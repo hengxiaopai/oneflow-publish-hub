@@ -1,12 +1,12 @@
-# Phase 4 Backend Setup
+# Phase 5 Backend Setup
 
 更新日期：2026-06-15
 
 ## 定位
 
-Phase 4 后端是 OneFlow 的最小 SaaS 开发服务。它提供 Fastify API、Prisma
-数据模型、SQLite、本地 dev session、服务端 Entitlement、凭据加密字段和
-Mock Publisher Worker。它不是生产认证或真实平台发布服务。
+Phase 5 后端提供 Fastify API、Prisma、SQLite 本地开发、PostgreSQL 兼容 schema、
+Argon2id 密码认证、持久 Cookie Session、Workspace RBAC、服务端 Entitlement、
+凭据加密字段和 Mock Publisher Worker。
 
 ## 环境要求
 
@@ -33,6 +33,8 @@ npm run dev
 
 - `Local Demo Mode`：继续使用 `localStorage`，后端未启动也可用。
 - `SaaS Dev Mode`：调用 `/api/dev/session`，文章、渠道、用量和发布批次使用后端。
+- `SaaS Auth Mode`：通过 `/api/auth/register` 或 `/api/auth/login` 使用真实账号
+  与 httpOnly Cookie Session。
 
 ## 环境变量
 
@@ -42,10 +44,16 @@ HOST=127.0.0.1
 DATABASE_URL=file:./dev.db
 ENCRYPTION_KEY=replace-with-a-long-random-local-key
 SESSION_SECRET=replace-with-a-different-long-random-session-secret
+SESSION_COOKIE_NAME=oneflow_session
+SESSION_TTL_HOURS=168
 CORS_ORIGIN=http://127.0.0.1:4173
 BODY_LIMIT=3145728
+AUTH_RATE_LIMIT_MAX=12
 DEV_SESSION_RATE_LIMIT_MAX=20
 PUBLISH_RATE_LIMIT_MAX=30
+DEMO_USER_EMAIL=
+DEMO_USER_NAME=OneFlow Developer
+DEMO_USER_PASSWORD=
 ```
 
 服务启动时会校验环境变量。`ENCRYPTION_KEY` 和 `SESSION_SECRET` 少于 32 字符会直接
@@ -57,8 +65,10 @@ PUBLISH_RATE_LIMIT_MAX=30
 默认运行时数据库位于 `server/dev.db`。后端测试为每个测试文件创建独立的临时
 SQLite 数据库，测试后删除；这些文件均被 `.gitignore` 排除。
 
-Seed 可重复执行，固定开发记录使用 upsert，不会生成重复用户、工作区、订阅、文章、
-渠道或 AI 能力。
+Seed 可重复执行。只有同时配置 `DEMO_USER_EMAIL` 与 `DEMO_USER_PASSWORD` 时才会
+生成可登录的本地 demo 账号；密码明文不写入代码或数据库。
+
+PostgreSQL 切换见 [PostgreSQL Migration](postgres-migration.md)。
 
 ## 测试
 
@@ -90,8 +100,8 @@ Compose 启动后端与持久化 SQLite volume。完整边界见
 
 ## 当前限制
 
-- Dev session 仅保存在后端内存中，重启服务后失效。
+- Dev Session 和真实账号 Session 均持久化在数据库中；Dev Session 仍只允许开发环境。
 - SQLite 适合单机开发，不提供生产级并发、备份和高可用。
 - Mock Worker 在 API 进程内同步执行，没有 Durable Queue。
 - 未接 OAuth、邮件、支付、对象存储或真实平台 API。
-- 生产环境应迁移 PostgreSQL、持久 Session、KMS 和独立 Worker。
+- 生产环境应迁移 PostgreSQL、KMS、独立 Worker，并补齐邮箱验证、MFA 与 CSRF。

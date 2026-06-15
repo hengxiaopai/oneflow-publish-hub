@@ -13,7 +13,7 @@
     "test:frontend": "node --test tests/*.test.js",
     "test:server": "npm --prefix server test",
     "lint": "npm run check",
-    "check": "node scripts/check.mjs && npm --prefix server run prisma:validate",
+    "check": "node scripts/check.mjs && npm --prefix server run prisma:validate && npm --prefix server run prisma:validate:postgres",
     "security:scan": "node scripts/scan-sensitive.mjs",
     "db:generate": "npm --prefix server run prisma:generate",
     "db:migrate": "npm --prefix server run prisma:migrate",

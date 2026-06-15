@@ -29,6 +29,7 @@ oneflow-workspace-*.json
 oneflow-corrupt-backup-*.json*
 server/node_modules/
 server/generated/
+server/prisma/generated/
 server/*.db
 server/*.db-journal
 server/*.db-shm

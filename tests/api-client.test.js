@@ -215,3 +215,40 @@ test("network failures return the explicit backend unavailable message", async (
       error.message === "后端服务未启动，可切换到本地开发模式。"
   );
 });
+
+test("real auth uses cookie credentials without storing a session token", async () => {
+  const requests = [];
+  const storage = createStorage();
+  const client = createApiClient({
+    sessionStorage: storage,
+    fetchImpl: async (url, options) => {
+      requests.push({ url, options });
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          data: { user: { id: "user-1" }, workspace: { id: "workspace-1" } },
+          meta: {},
+        }),
+        { status: 200, headers: { "content-type": "application/json" } }
+      );
+    },
+  });
+
+  await client.register({
+    email: "creator@example.test",
+    password: "correct-horse-battery-staple",
+    name: "林墨",
+  });
+  await client.login({
+    email: "creator@example.test",
+    password: "correct-horse-battery-staple",
+  });
+
+  assert.equal(requests[0].options.credentials, "include");
+  assert.equal(requests[1].options.credentials, "include");
+  assert.equal(storage.getItem("oneflow.dev.session"), null);
+  assert.equal(
+    requests.some(({ options }) => "x-oneflow-dev-session" in options.headers),
+    false
+  );
+});

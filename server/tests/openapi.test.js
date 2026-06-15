@@ -15,11 +15,14 @@ test("OpenAPI document describes every Phase 4 API group", async (t) => {
   assert.equal(document.openapi, "3.1.0");
   [
     "/api/dev/session",
+    "/api/auth/register",
+    "/api/auth/login",
     "/api/auth/me",
     "/api/workspaces/current",
     "/api/articles",
     "/api/channels",
     "/api/publish-batches",
     "/api/usage",
+    "/api/ai-capabilities",
   ].forEach((path) => assert.ok(document.paths[path], path));
 });

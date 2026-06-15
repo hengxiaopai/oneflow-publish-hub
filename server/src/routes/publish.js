@@ -5,18 +5,19 @@ import {
 import {
   canPublishBatch,
   canSchedulePublish,
+  entitlementErrorDetails,
   getWorkspaceEntitlementContext,
 } from "../services/entitlementService.js";
 
-function errorResponse(request, reply, statusCode, code, message) {
-  return reply.failure(statusCode, code, message);
+function errorResponse(request, reply, statusCode, code, message, details) {
+  return reply.failure(statusCode, code, message, details);
 }
 
 export async function publishRoutes(app) {
   app.post(
     "/publish-batches",
     {
-      preHandler: app.authenticate,
+      preHandler: [app.authenticate, app.requireEditor],
       schema: {
         body: {
           type: "object",
@@ -57,8 +58,9 @@ export async function publishRoutes(app) {
           request,
           reply,
           403,
-          publishDecision.reason,
+          "ENTITLEMENT_LIMIT_EXCEEDED",
           "当前套餐的发布批次额度已用完。",
+          entitlementErrorDetails(publishDecision, "canPublishBatch"),
         );
       }
       if (request.body.scheduleAt) {
@@ -68,8 +70,9 @@ export async function publishRoutes(app) {
             request,
             reply,
             403,
-            scheduleDecision.reason,
+            "ENTITLEMENT_LIMIT_EXCEEDED",
             "当前套餐不支持定时发布。",
+            entitlementErrorDetails(scheduleDecision, "canSchedulePublish"),
           );
         }
       }
@@ -126,7 +129,7 @@ export async function publishRoutes(app) {
   app.post(
     "/publish-tasks/:id/retry",
     {
-      preHandler: app.authenticate,
+      preHandler: [app.authenticate, app.requireEditor],
       config: {
         rateLimit: {
           max: app.config.publishRateLimitMax,

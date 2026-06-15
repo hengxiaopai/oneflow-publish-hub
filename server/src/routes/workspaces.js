@@ -4,6 +4,8 @@ function workspaceView(membership) {
     name: membership.workspace.name,
     slug: membership.workspace.slug,
     role: membership.role,
+    plan: membership.workspace.plan,
+    ownerId: membership.workspace.ownerId,
     createdAt: membership.workspace.createdAt,
   };
 }

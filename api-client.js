@@ -43,12 +43,13 @@
         throw error;
       }
 
+      const { useDevSession = true, ...fetchOptions } = requestOptions;
       const headers = {
-        ...(requestOptions.body ? { "content-type": "application/json" } : {}),
-        ...(requestOptions.headers || {}),
+        ...(fetchOptions.body ? { "content-type": "application/json" } : {}),
+        ...(fetchOptions.headers || {}),
       };
       const sessionToken = storage?.getItem(SESSION_KEY);
-      if (sessionToken) {
+      if (useDevSession && sessionToken) {
         headers["x-oneflow-dev-session"] = sessionToken;
       }
 
@@ -61,13 +62,14 @@
       updateConnection("connecting");
       try {
         response = await fetchImpl(`${baseUrl}${path}`, {
-          ...requestOptions,
+          ...fetchOptions,
           headers,
+          credentials: "include",
           body:
-            requestOptions.body &&
-            typeof requestOptions.body !== "string"
-              ? JSON.stringify(requestOptions.body)
-              : requestOptions.body,
+            fetchOptions.body &&
+            typeof fetchOptions.body !== "string"
+              ? JSON.stringify(fetchOptions.body)
+              : fetchOptions.body,
           signal: controller.signal,
         });
       } catch (cause) {
@@ -141,6 +143,22 @@
           storage?.setItem(SESSION_KEY, data.sessionToken);
         }
         return data;
+      },
+      async register(credentials) {
+        storage?.removeItem(SESSION_KEY);
+        return request("/auth/register", {
+          method: "POST",
+          body: credentials,
+          useDevSession: false,
+        });
+      },
+      async login(credentials) {
+        storage?.removeItem(SESSION_KEY);
+        return request("/auth/login", {
+          method: "POST",
+          body: credentials,
+          useDevSession: false,
+        });
       },
       async getCurrentUser() {
         return request("/auth/me", { method: "GET" });

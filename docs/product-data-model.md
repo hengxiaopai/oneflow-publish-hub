@@ -367,10 +367,10 @@ schema version 3 的本地快照，`mergePersistedState()` 负责用当前默认
 5. 封面目前只保存资源路径和说明，不保存用户上传的二进制文件。
 6. 接后端时应按模型拆分 API，并使用服务端版本号或 ETag 处理并发更新。
 
-## Phase 3S SaaS Identity And Billing Models
+## Phase 5 SaaS Identity And Billing Models
 
-以下模型属于目标 SaaS 后端。当前前端只使用非敏感 mock 投影，不把它们伪装成
-真实认证或支付记录。
+身份、Session、Workspace 与 Membership 已在 Prisma 中实现；Billing Provider
+仍是目标模型。
 
 ### User
 
@@ -380,9 +380,10 @@ schema version 3 的本地快照，`mergePersistedState()` 负责用当前默认
 |---|---|---|
 | `id` | string | 用户 ID |
 | `email` | string | 已规范化邮箱 |
-| `displayName` | string | 显示名称 |
+| `name` | string | 显示名称 |
 | `avatarUrl` | string/null | 头像地址 |
-| `status` | string | `active`、`invited`、`suspended` |
+| `passwordHash` | string/null | Argon2id hash，不进入 API |
+| `status` | string | `active`、`suspended` |
 | `createdAt` | ISO string | 创建时间 |
 | `updatedAt` | ISO string | 更新时间 |
 
@@ -390,7 +391,7 @@ schema version 3 的本地快照，`mergePersistedState()` 负责用当前默认
 {
   "id": "usr_01",
   "email": "creator@example.test",
-  "displayName": "林墨",
+  "name": "林墨",
   "status": "active"
 }
 ```
@@ -404,9 +405,8 @@ schema version 3 的本地快照，`mergePersistedState()` 负责用当前默认
 | `id` | string | Workspace ID |
 | `name` | string | 工作区名称 |
 | `slug` | string | URL 标识 |
-| `ownerUserId` | string | 所有者 |
-| `billingCustomerId` | string/null | BillingCustomer |
-| `settings` | object | 非敏感工作区设置 |
+| `ownerId` | string/null | 所有者 User |
+| `plan` | string | `free`、`pro`、`studio` |
 | `createdAt` | ISO string | 创建时间 |
 
 ```json
@@ -414,7 +414,8 @@ schema version 3 的本地快照，`mergePersistedState()` 负责用当前默认
   "id": "ws_01",
   "name": "技术内容引擎",
   "slug": "tech-content",
-  "ownerUserId": "usr_01"
+  "ownerId": "usr_01",
+  "plan": "free"
 }
 ```
 
@@ -427,18 +428,15 @@ User 与 Workspace 的成员关系。
 | `id` | string | 成员关系 ID |
 | `workspaceId` | string | Workspace |
 | `userId` | string | User |
-| `roleId` | string | Role |
-| `status` | string | `active`、`invited`、`removed` |
-| `invitedBy` | string/null | 邀请人 |
-| `joinedAt` | ISO string/null | 加入时间 |
+| `role` | string | `owner`、`admin`、`editor`、`viewer` |
+| `createdAt` | ISO string | 加入时间 |
 
 ```json
 {
   "id": "wsm_01",
   "workspaceId": "ws_01",
   "userId": "usr_01",
-  "roleId": "role_owner",
-  "status": "active"
+  "role": "owner"
 }
 ```
 
@@ -466,28 +464,32 @@ User 与 Workspace 的成员关系。
 
 ### Session
 
-服务端登录 Session。目标实现使用 HttpOnly Cookie，Session Secret 不返回前端。
+服务端登录 Session。原始 token 只通过 HttpOnly Cookie 或开发 Header 传输，数据库
+仅保存 hash。
 
 | 字段 | 类型 | 含义 |
 |---|---|---|
 | `id` | string | Session ID |
 | `userId` | string | User |
-| `activeWorkspaceId` | string/null | 当前 Workspace |
+| `workspaceId` | string | 当前 Workspace |
+| `tokenHash` | string | HMAC hash，不进入 API |
+| `kind` | string | `auth` 或 `dev` |
 | `expiresAt` | ISO string | 过期时间 |
-| `lastSeenAt` | ISO string | 最近活动 |
-| `revokedAt` | ISO string/null | 撤销时间 |
-| `metadata` | object | 脱敏客户端信息 |
+| `userAgent` | string/null | 截断后的客户端标识 |
+| `ipHash` | string/null | IP 的不可逆 hash |
+| `createdAt` | ISO string | 创建时间 |
 
 ```json
 {
   "id": "ses_01",
   "userId": "usr_01",
-  "activeWorkspaceId": "ws_01",
+  "workspaceId": "ws_01",
+  "kind": "auth",
   "expiresAt": "2026-07-14T00:00:00Z"
 }
 ```
 
-### AuthProvider
+### AuthIdentity
 
 用户的密码、OAuth 或企业身份提供方关系。
 
@@ -496,17 +498,15 @@ User 与 Workspace 的成员关系。
 | `id` | string | Provider 关系 ID |
 | `userId` | string | User |
 | `provider` | string | `password`、`github`、`google` 等 |
-| `providerSubject` | string | Provider 用户标识 |
-| `credentialMetadata` | object | 非敏感状态 |
+| `providerUserId` | string | Provider 用户标识 |
 | `createdAt` | ISO string | 绑定时间 |
 
 ```json
 {
   "id": "auth_01",
   "userId": "usr_01",
-  "provider": "github",
-  "providerSubject": "123456",
-  "credentialMetadata": { "connected": true }
+  "provider": "password",
+  "providerUserId": "creator@example.test"
 }
 ```
 

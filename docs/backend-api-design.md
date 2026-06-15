@@ -2,12 +2,14 @@
 
 更新日期：2026-06-15
 
-## Phase 4 实现状态
+## Phase 5 实现状态
 
 当前 Fastify 服务已实现：
 
 ```text
 POST /api/dev/session
+POST /api/auth/register
+POST /api/auth/login
 GET  /api/auth/me
 POST /api/auth/logout
 GET  /api/workspaces
@@ -26,10 +28,12 @@ GET  /api/publish-batches
 GET  /api/publish-batches/:id
 POST /api/publish-tasks/:id/retry
 GET  /api/usage
+GET  /api/ai-capabilities
+POST /api/ai-capabilities/:id/run
 ```
 
-Phase 4 使用 `x-oneflow-dev-session` header 承载内存 dev session。下文的正式登录、
-Secure HttpOnly Cookie、分页、幂等键和更细 Role 是生产目标，不应误解为已实现。
+真实账号使用 httpOnly Cookie Session；`x-oneflow-dev-session` 仅在非生产环境
+保留。Session、Workspace Membership、RBAC 与 Entitlement 均由服务端验证。
 
 ## 通用约定
 
@@ -74,6 +78,9 @@ CONFLICT
 RATE_LIMITED
 PLAN_UPGRADE_REQUIRED
 USAGE_LIMIT_REACHED
+ENTITLEMENT_LIMIT_EXCEEDED
+ROLE_PERMISSION_DENIED
+WORKSPACE_ACCESS_DENIED
 INTERNAL_ERROR
 ```
 
@@ -82,11 +89,16 @@ INTERNAL_ERROR
 
 ## Auth
 
+### POST /api/auth/register
+
+请求：`email`、至少 10 位的 `password` 和 `name`。成功创建 User、Owner Workspace、
+Free Plan 与 Cookie Session。重复邮箱返回 `EMAIL_ALREADY_REGISTERED`。
+
 ### POST /api/dev/session
 
 仅本地开发。请求可选 `{ "profileKey": "browser-default" }`，创建或复用本地开发
 用户和默认 Workspace，返回一次 dev session、Free Subscription 和 Workspace。
-不接收账号密码，不属于生产认证。
+不接收账号密码；生产环境返回 `DEV_ONLY_DISABLED`。
 
 ### POST /api/auth/login
 
@@ -99,7 +111,8 @@ INTERNAL_ERROR
 }
 ```
 
-响应：`User`、可访问 Workspace 摘要，并通过 Secure HttpOnly Cookie 建立 Session。
+响应：`User`、当前 Workspace 摘要，并通过 httpOnly Cookie 建立 Session。生产环境
+Cookie 自动启用 `Secure`。
 
 错误：`INVALID_CREDENTIALS`、`ACCOUNT_LOCKED`、`RATE_LIMITED`。
 

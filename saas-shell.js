@@ -126,7 +126,7 @@
 
   function normalizeHash(hash, sessionMode) {
     if (ROUTE_VALUES.has(hash)) return hash;
-    return ["local", "saas_dev"].includes(sessionMode)
+    return ["local", "saas_dev", "saas_auth"].includes(sessionMode)
       ? ROUTES.dashboard
       : ROUTES.login;
   }
@@ -184,8 +184,8 @@
   function enterCloudPlaceholder(state) {
     return {
       ...state,
-      sessionMode: null,
-      cloudAuthStatus: "placeholder",
+      sessionMode: "saas_auth",
+      cloudAuthStatus: "signed_out",
       activeRoute: ROUTES.login,
     };
   }
@@ -204,6 +204,27 @@
     };
   }
 
+  function enterSaasAuthentication(state, payload = {}) {
+    return {
+      ...state,
+      sessionMode: "saas_auth",
+      cloudAuthStatus: "authenticated",
+      activeRoute: ROUTES.dashboard,
+      backendStatus: payload.backendStatus || state.backendStatus,
+      remoteUser: payload.user || state.remoteUser,
+      remoteWorkspace: payload.workspace || state.remoteWorkspace,
+      currentPlanId:
+        payload.workspace?.plan ||
+        payload.subscription?.planId ||
+        state.currentPlanId ||
+        "free",
+    };
+  }
+
+  function isRemoteMode(sessionMode) {
+    return ["saas_dev", "saas_auth"].includes(sessionMode);
+  }
+
   function getWorkspaceTask(taskList, channelId) {
     return (taskList || []).find(
       (task) =>
@@ -219,7 +240,7 @@
       ...(saasState?.usage || {}),
       articles: Math.max(1, Number(saasState?.usage?.articles) || 0),
       publishBatches:
-        saasState?.sessionMode === "saas_dev"
+        isRemoteMode(saasState?.sessionMode)
           ? Number(saasState?.usage?.publishBatches) || 0
           : (workspace.publishBatches || []).length,
     };
@@ -456,7 +477,7 @@
 
   function renderChannels(container, workspace, state) {
     const channels =
-      state.sessionMode === "saas_dev"
+      isRemoteMode(state.sessionMode)
         ? state.remoteChannels.map((channel) => ({
             id: channel.id,
             platform: channel.displayName,
@@ -702,12 +723,15 @@
   }
 
   function renderSettings(container, state) {
+    const workspaceName = state.remoteWorkspace?.name || "本地工作区";
     const modeLabel =
       state.sessionMode === "saas_dev"
         ? "SaaS Dev Mode"
+        : state.sessionMode === "saas_auth"
+          ? "SaaS 账号模式"
         : state.sessionMode === "local"
           ? "本地演示模式"
-          : "SaaS 云端占位";
+          : "未登录";
     container.innerHTML = `
       <div class="saas-page">
         ${pageHeader(
@@ -718,9 +742,9 @@
         <div class="settings-grid">
           <section>
             <span class="eyebrow">Workspace</span>
-            <h2>技术内容引擎</h2>
+            <h2>${escapeHtml(workspaceName)}</h2>
             <p>当前运行模式：${modeLabel}</p>
-            <label>工作区名称<input type="text" value="技术内容引擎" aria-label="工作区名称" /></label>
+            <label>工作区名称<input type="text" value="${escapeHtml(workspaceName)}" aria-label="工作区名称" /></label>
             <button type="button" data-shell-action="save-settings">保存设置</button>
           </section>
           <section>
@@ -742,7 +766,7 @@
           <section>
             <span class="eyebrow">Session</span>
             <h2>切换入口</h2>
-            <p>退出本地开发模式不会删除浏览器中的工作区数据。</p>
+            <p>退出当前模式不会删除本地工作区数据；云端会话将在服务端撤销。</p>
             <button type="button" data-shell-action="exit-local">返回登录入口</button>
           </section>
         </div>
@@ -763,6 +787,10 @@
       productMenuToggle: document.querySelector("#toggle-product-menu"),
       login: document.querySelector("#login-view"),
       cloudPlaceholder: document.querySelector("#cloud-auth-placeholder"),
+      authForm: document.querySelector("#saas-auth-form"),
+      authLoginMode: document.querySelector("#auth-mode-login"),
+      authRegisterMode: document.querySelector("#auth-mode-register"),
+      authNameField: document.querySelector(".auth-name-field"),
       saasDevStatus: document.querySelector("#saas-dev-status"),
       saasDevButton: document.querySelector("#enter-saas-dev-mode"),
       workbench: document.querySelector("#workbench-view"),
@@ -778,11 +806,15 @@
     let toastTimer = null;
     let remoteSaveTimer = null;
     let remoteSaveInFlight = false;
+    let authMode = "login";
     const storedMode = globalScope.sessionStorage.getItem(SESSION_KEY);
     if (storedMode === "local") {
       state = enterLocalDevelopment(state);
     } else if (storedMode === "saas_dev") {
       state = enterSaasDevelopment(state, { backendStatus: "connecting" });
+    } else if (storedMode === "saas_auth") {
+      state = enterCloudPlaceholder(state);
+      state.backendStatus = "connecting";
     }
     try {
       const preferences = JSON.parse(
@@ -823,6 +855,13 @@
           state.remoteWorkspace?.name || "OneFlow SaaS Dev";
         small.textContent = `${state.currentPlanId.toUpperCase()} · API 模式`;
         refs.profileButton.setAttribute("aria-label", "当前模式：SaaS Dev");
+      } else if (state.sessionMode === "saas_auth") {
+        strong.textContent =
+          state.remoteWorkspace?.name ||
+          state.remoteUser?.name ||
+          "OneFlow Cloud";
+        small.textContent = `${state.currentPlanId.toUpperCase()} · SaaS 账号`;
+        refs.profileButton.setAttribute("aria-label", "当前模式：SaaS 账号");
       } else {
         strong.textContent = "本地工作区";
         small.textContent = "Free · 演示模式";
@@ -839,7 +878,7 @@
         unavailable: "API 不可用",
       };
       const effectiveStatus =
-        state.sessionMode === "saas_dev" ? status : "idle";
+        isRemoteMode(state.sessionMode) ? status : "idle";
       refs.apiConnectionStatus.dataset.state = effectiveStatus;
       refs.apiConnectionStatus.textContent =
         labels[effectiveStatus] || labels.idle;
@@ -881,7 +920,10 @@
       await ensureSaasChannel();
     }
 
-    async function loadSaasWorkspace(sessionContext = null) {
+    async function loadSaasWorkspace(
+      sessionContext = null,
+      mode = state.sessionMode || "saas_dev"
+    ) {
       if (!apiClient) {
         throw new Error("后端 API Client 未加载，可切换到本地演示模式。");
       }
@@ -892,15 +934,25 @@
         apiClient.listChannels(),
         apiClient.listPublishBatches(),
       ]);
-      state = enterSaasDevelopment(state, {
-        ...auth,
-        backendStatus: "connected",
-      });
+      state =
+        mode === "saas_auth"
+          ? enterSaasAuthentication(state, {
+              ...auth,
+              backendStatus: "connected",
+            })
+          : enterSaasDevelopment(state, {
+              ...auth,
+              backendStatus: "connected",
+            });
       state.usage = usageFromApi(usage);
       state.remoteArticles = articles;
       state.remoteChannels = channels;
       state.remotePublishBatches = batches;
-      await ensureSaasSeedData();
+      if (mode === "saas_dev") {
+        await ensureSaasSeedData();
+      } else {
+        state.remoteArticleId = state.remoteArticles[0]?.id || null;
+      }
       state.usage.articles = state.remoteArticles.length;
       updateProfileMode();
       updateApiConnectionStatus("connected");
@@ -953,8 +1005,78 @@
       }
     }
 
+    function setAuthMode(nextMode) {
+      authMode = nextMode === "register" ? "register" : "login";
+      const registering = authMode === "register";
+      refs.authLoginMode.classList.toggle("is-active", !registering);
+      refs.authRegisterMode.classList.toggle("is-active", registering);
+      refs.authLoginMode.setAttribute("aria-selected", String(!registering));
+      refs.authRegisterMode.setAttribute("aria-selected", String(registering));
+      refs.authNameField.hidden = !registering;
+      const nameInput = refs.authForm.elements.namedItem("name");
+      const passwordInput = refs.authForm.elements.namedItem("password");
+      nameInput.required = registering;
+      passwordInput.autocomplete = registering
+        ? "new-password"
+        : "current-password";
+      refs.authForm.querySelector(".auth-submit").textContent = registering
+        ? "创建 OneFlow 账号"
+        : "登录 OneFlow";
+    }
+
+    async function submitSaasAuthentication(event) {
+      event.preventDefault();
+      const submit = refs.authForm.querySelector(".auth-submit");
+      const formData = new FormData(refs.authForm);
+      const credentials = {
+        email: String(formData.get("email") || "").trim(),
+        password: String(formData.get("password") || ""),
+        ...(authMode === "register"
+          ? { name: String(formData.get("name") || "").trim() }
+          : {}),
+      };
+      submit.disabled = true;
+      setSaasDevStatus(
+        authMode === "register" ? "正在创建工作区…" : "正在验证账号…"
+      );
+      try {
+        const session =
+          authMode === "register"
+            ? await apiClient.register(credentials)
+            : await apiClient.login(credentials);
+        await loadSaasWorkspace(session, "saas_auth");
+        globalScope.sessionStorage.setItem(SESSION_KEY, "saas_auth");
+        refs.authForm.reset();
+        setSaasDevStatus("");
+        globalScope.location.hash = ROUTES.dashboard;
+        renderRoute();
+      } catch (error) {
+        setSaasDevStatus(error.message || "登录失败，请稍后重试。", "error");
+      } finally {
+        submit.disabled = false;
+      }
+    }
+
+    async function restoreSaasAuthentication() {
+      try {
+        await loadSaasWorkspace(null, "saas_auth");
+        renderRoute();
+      } catch (error) {
+        state = enterCloudPlaceholder(createSaasState());
+        globalScope.sessionStorage.removeItem(SESSION_KEY);
+        globalScope.location.hash = ROUTES.login;
+        setSaasDevStatus(
+          error.status === 401
+            ? "登录已过期，请重新登录。"
+            : error.message || "后端服务未启动，可切换到本地演示模式。",
+          "error"
+        );
+        renderRoute();
+      }
+    }
+
     function renderRemoteArticles() {
-      if (state.sessionMode !== "saas_dev") return;
+      if (!isRemoteMode(state.sessionMode)) return;
       const list = document.querySelector("#content-library-list");
       if (!list) return;
       list.innerHTML = state.remoteArticles.length
@@ -983,7 +1105,7 @@
     }
 
     function renderRemotePublishHistory() {
-      if (state.sessionMode !== "saas_dev") return;
+      if (!isRemoteMode(state.sessionMode)) return;
       const list = document.querySelector("#publish-history-list");
       if (!list) return;
       list.innerHTML = state.remotePublishBatches.length
@@ -1066,7 +1188,7 @@
       let route = normalizeHash(globalScope.location.hash, state.sessionMode);
       if (
         route !== ROUTES.login &&
-        !["local", "saas_dev"].includes(state.sessionMode)
+        !["local", "saas_dev", "saas_auth"].includes(state.sessionMode)
       ) {
         route = ROUTES.login;
       }
@@ -1083,8 +1205,7 @@
         hideLegacyViews();
         refs.topShell.hidden = true;
         refs.login.hidden = false;
-        refs.cloudPlaceholder.hidden =
-          state.cloudAuthStatus !== "placeholder";
+        refs.cloudPlaceholder.hidden = state.sessionMode !== "saas_auth";
       } else {
         refs.topShell.hidden = false;
         updateProfileMode();
@@ -1112,7 +1233,7 @@
       );
     }
 
-    document.addEventListener("click", (event) => {
+    document.addEventListener("click", async (event) => {
       const routeLink = event.target.closest("[data-route-link]");
       if (routeLink) refs.productMenu.hidden = true;
 
@@ -1149,7 +1270,7 @@
         .shellAction;
       if (!action) return;
       if (action === "new-article") {
-        if (state.sessionMode === "saas_dev") {
+        if (isRemoteMode(state.sessionMode)) {
           state.remoteArticleId = null;
         }
         app.createNewArticle();
@@ -1176,8 +1297,8 @@
         document.querySelector("#reset-demo")?.click();
       } else if (action === "exit-local") {
         globalScope.sessionStorage.removeItem(SESSION_KEY);
-        if (state.sessionMode === "saas_dev") {
-          apiClient?.logout().catch(() => {});
+        if (isRemoteMode(state.sessionMode)) {
+          await apiClient?.logout().catch(() => {});
         }
         state = createSaasState();
         updateApiConnectionStatus("idle");
@@ -1197,7 +1318,7 @@
 
     refs.saasDevButton.addEventListener("click", startSaasDevelopment);
     apiClient?.subscribeConnection((connection) => {
-      if (state.sessionMode !== "saas_dev") return;
+      if (!isRemoteMode(state.sessionMode)) return;
       state.backendStatus = connection.status;
       updateApiConnectionStatus(connection.status);
       if (connection.status === "unavailable" && connection.error) {
@@ -1210,7 +1331,13 @@
       .addEventListener("click", () => {
         state = enterCloudPlaceholder(state);
         refs.cloudPlaceholder.hidden = false;
+        setAuthMode("login");
       });
+    refs.authLoginMode.addEventListener("click", () => setAuthMode("login"));
+    refs.authRegisterMode.addEventListener("click", () =>
+      setAuthMode("register")
+    );
+    refs.authForm.addEventListener("submit", submitSaasAuthentication);
 
     refs.productMenuToggle.addEventListener("click", () => {
       const willOpen = refs.productMenu.hidden;
@@ -1232,7 +1359,7 @@
     globalScope.addEventListener("hashchange", renderRoute);
     app.subscribe((workspace) => {
       if (
-        state.sessionMode === "saas_dev" &&
+        isRemoteMode(state.sessionMode) &&
         state.backendStatus === "connected" &&
         !remoteSaveInFlight
       ) {
@@ -1272,13 +1399,17 @@
     });
     app.subscribePublishBatches?.(async (batch, workspace) => {
       if (
-        state.sessionMode !== "saas_dev" ||
+        !isRemoteMode(state.sessionMode) ||
         state.backendStatus !== "connected"
       ) {
         return;
       }
       try {
-        await ensureSaasChannel();
+        if (state.sessionMode === "saas_dev") {
+          await ensureSaasChannel();
+        } else if (!state.remoteChannels.length) {
+          throw new Error("请先在渠道设置中连接一个可发布渠道。");
+        }
         const article = await apiClient.saveArticle(
           workspace.currentArticle,
           state.remoteArticleId
@@ -1312,6 +1443,8 @@
     renderRoute();
     if (storedMode === "saas_dev") {
       restoreSaasDevelopment();
+    } else if (storedMode === "saas_auth") {
+      restoreSaasAuthentication();
     }
   }
 
@@ -1323,6 +1456,7 @@
     createSaasState,
     enterCloudPlaceholder,
     enterLocalDevelopment,
+    enterSaasAuthentication,
     enterSaasDevelopment,
     normalizeHash,
     toggleAICapability,

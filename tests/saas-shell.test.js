@@ -36,7 +36,7 @@ test("all confirmed SaaS hashes normalize and unknown routes fall back by mode",
   assert.equal(normalizeHash("", null), "#/login");
 });
 
-test("local development entry is explicit and cloud mode remains a placeholder", () => {
+test("local development entry is explicit and SaaS auth has its own mode", () => {
   assert.deepEqual(enterLocalDevelopment(createSaasState()), {
     ...createSaasState(),
     sessionMode: "local",
@@ -45,8 +45,8 @@ test("local development entry is explicit and cloud mode remains a placeholder",
   });
   assert.deepEqual(enterCloudPlaceholder(createSaasState()), {
     ...createSaasState(),
-    sessionMode: null,
-    cloudAuthStatus: "placeholder",
+    sessionMode: "saas_auth",
+    cloudAuthStatus: "signed_out",
     activeRoute: "#/login",
   });
 });
@@ -128,13 +128,12 @@ test("AI toggles persist enabled state and block automatic execution without ent
   assert.equal(allowed.aiPreferences.title_generation.automatic, true);
 });
 
-test("SaaS shell source contains no token input or credential value rendering", () => {
+test("SaaS shell source contains no token or credential value rendering", () => {
   const source = fs.readFileSync(
     path.join(__dirname, "..", "saas-shell.js"),
     "utf8"
   );
 
-  assert.doesNotMatch(source, /type=["']password["']/i);
   assert.doesNotMatch(source, /\.token\b|\.apiKey\b|authorizationHeader/i);
 });
 
@@ -160,6 +159,12 @@ test("HTML declares every SaaS route surface and loads shell scripts after the w
   requiredIds.forEach((id) => assert.match(html, new RegExp(`id="${id}"`)));
   assert.match(html, /id="enter-local-mode"/);
   assert.match(html, /id="show-cloud-placeholder"/);
+  assert.match(html, /id="saas-auth-form"/);
+  assert.match(html, /name="email"/);
+  assert.match(html, /name="password"/);
+  assert.match(html, /name="name"/);
+  assert.match(html, /id="auth-mode-login"/);
+  assert.match(html, /id="auth-mode-register"/);
   assert.match(html, /id="enter-saas-dev-mode"/);
   assert.match(html, /id="product-menu"/);
   assert.match(html, /href="#\/dashboard"/);

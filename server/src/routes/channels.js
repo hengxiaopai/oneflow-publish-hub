@@ -6,6 +6,7 @@ import {
 } from "../services/channelService.js";
 import {
   canConnectChannel,
+  entitlementErrorDetails,
   getWorkspaceEntitlementContext,
 } from "../services/entitlementService.js";
 
@@ -44,7 +45,7 @@ export async function channelRoutes(app) {
   app.post(
     "/channels",
     {
-      preHandler: app.authenticate,
+      preHandler: [app.authenticate, app.requireAdmin],
       schema: {
         body: {
           type: "object",
@@ -63,8 +64,9 @@ export async function channelRoutes(app) {
       if (!decision.allowed) {
         return reply.failure(
           403,
-          decision.reason,
+          "ENTITLEMENT_LIMIT_EXCEEDED",
           "当前套餐的渠道连接额度已用完。",
+          entitlementErrorDetails(decision, "canConnectChannel"),
         );
       }
       const channel = await app.prisma.channelConfig.create({
@@ -80,7 +82,7 @@ export async function channelRoutes(app) {
   app.put(
     "/channels/:id",
     {
-      preHandler: app.authenticate,
+      preHandler: [app.authenticate, app.requireAdmin],
       schema: {
         body: {
           type: "object",
@@ -108,7 +110,7 @@ export async function channelRoutes(app) {
 
   app.post(
     "/channels/:id/test",
-    { preHandler: app.authenticate },
+    { preHandler: [app.authenticate, app.requireAdmin] },
     async (request, reply) => {
       const existing = await app.prisma.channelConfig.findFirst({
         where: {

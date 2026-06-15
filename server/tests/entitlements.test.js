@@ -66,3 +66,27 @@ test("paid feature entitlements fail closed on Free", () => {
     "AI_ADAPTATION_LIMIT_REACHED",
   );
 });
+
+test("workspace plan is the source of server entitlement context", async () => {
+  const calls = [];
+  const prisma = {
+    workspace: {
+      findUnique: async (query) => {
+        calls.push(query);
+        return { plan: "pro" };
+      },
+    },
+    article: { count: async () => 1 },
+    channelConfig: { count: async () => 0 },
+    publishBatch: { count: async () => 0 },
+    workspaceMember: { count: async () => 1 },
+    usageRecord: {
+      aggregate: async () => ({ _sum: { quantity: 0 } }),
+    },
+  };
+  const { getWorkspaceEntitlementContext } =
+    await import("../src/services/entitlementService.js");
+  const context = await getWorkspaceEntitlementContext(prisma, "workspace-1");
+  assert.equal(context.planId, "pro");
+  assert.equal(calls[0].where.id, "workspace-1");
+});

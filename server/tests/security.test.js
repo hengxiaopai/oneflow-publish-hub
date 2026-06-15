@@ -18,6 +18,7 @@ test("CORS allows configured origins and omits untrusted origins", async (t) => 
     allowed.headers["access-control-allow-origin"],
     "http://127.0.0.1:4173",
   );
+  assert.equal(allowed.headers["access-control-allow-credentials"], "true");
 
   const denied = await app.inject({
     method: "OPTIONS",
@@ -56,6 +57,28 @@ test("dev session endpoint is rate limited", async (t) => {
 
   assert.equal(responses[2].statusCode, 429);
   assert.equal(responses[2].json().ok, false);
+  assert.equal(responses[2].json().error.code, "RATE_LIMITED");
+});
+
+test("password login endpoint is rate limited", async (t) => {
+  const app = await createTestApp({ authRateLimitMax: 2 });
+  t.after(() => app.close());
+
+  const responses = [];
+  for (let index = 0; index < 3; index += 1) {
+    responses.push(
+      await app.inject({
+        method: "POST",
+        url: "/api/auth/login",
+        payload: {
+          email: `missing-${index}@example.test`,
+          password: "invalid-password",
+        },
+      }),
+    );
+  }
+
+  assert.equal(responses[2].statusCode, 429);
   assert.equal(responses[2].json().error.code, "RATE_LIMITED");
 });
 

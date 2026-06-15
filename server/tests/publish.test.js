@@ -169,5 +169,9 @@ test("Free plan blocks publish batches after the monthly quota", async () => {
     payload: { articleId: article.id, channelIds: [channel.id] },
   });
   assert.equal(blocked.statusCode, 403);
-  assert.equal(blocked.json().error.code, "PUBLISH_BATCH_LIMIT_REACHED");
+  assert.equal(blocked.json().error.code, "ENTITLEMENT_LIMIT_EXCEEDED");
+  assert.equal(
+    blocked.json().error.details.reason,
+    "PUBLISH_BATCH_LIMIT_REACHED",
+  );
 });

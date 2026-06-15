@@ -17,12 +17,16 @@ Compose 只启动后端，前端继续通过 `npm run dev:frontend` 静态运行
 
 当前 Dockerfile 是部署准备骨架，不代表生产就绪：
 
-- SQLite 仅适合单实例开发；生产计划迁移 PostgreSQL。
-- dev session 存于内存，重启即失效；生产需要正式 Auth 与持久 Session。
+- SQLite 仅适合单实例开发；生产使用
+  `server/prisma/schema.postgresql.prisma` 迁移 PostgreSQL。
+- Phase 5 已提供密码 Auth 与数据库 Session；生产仍需邮箱验证、MFA、CSRF、
+  Session 设备管理和异常登录审计。
 - Mock Worker 与 API 同进程；生产需要独立队列、重试策略和幂等键。
 - 平台凭据应由 KMS 或 Secrets Manager 管理，不能只依赖单个环境变量密钥。
 - 前端与 API 应位于受控域名，生产 CORS 禁止 `*`。
 - 需要在网关层补 TLS、WAF、全局限流、日志汇聚与备份策略。
+
+详细步骤见 [PostgreSQL Migration](postgres-migration.md)。
 
 ## CI
 

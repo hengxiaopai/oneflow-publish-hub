@@ -120,5 +120,6 @@ test("Free plan blocks article creation after the server-side limit", async () =
     payload: { title: "超额文章" },
   });
   assert.equal(response.statusCode, 403);
-  assert.equal(response.json().error.code, "ARTICLE_LIMIT_REACHED");
+  assert.equal(response.json().error.code, "ENTITLEMENT_LIMIT_EXCEEDED");
+  assert.equal(response.json().error.details.reason, "ARTICLE_LIMIT_REACHED");
 });
